@@ -39,8 +39,8 @@
     "prepare": "bob build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
-    "format": "prettier --write \"**/*.{js,ts,tsx,json,md}\"",
-    "format:check": "prettier --check \"**/*.{js,ts,tsx,json,md}\"",
+    "format": "prettier --write \"**/*.{js,ts,tsx,json,md}\" --ignore-path .prettierignore",
+    "format:check": "prettier --check \"**/*.{js,ts,tsx,json,md}\" --ignore-path .prettierignore",
     "test": "echo \"No tests specified\" && exit 0",
     "build": "bob build",
     "vendor:libwebp": "node -e \"const {execSync} = require('child_process'); const os = require('os'); const script = os.platform() === 'win32' ? 'scripts/vendor-libwebp.ps1' : 'scripts/vendor-libwebp.sh'; execSync(script, {stdio: 'inherit'})\""
