@@ -21,10 +21,10 @@ Pod::Spec.new do |s|
   if Dir.exist?(libwebp_path)
     s.source_files += "cpp/vendor/libwebp/src/**/*.{c,h}"
     s.public_header_files = "cpp/vendor/libwebp/src/webp/*.h"
-    s.compiler_flags = "-O3", "-DNDEBUG", "-DWEBP_AVAILABLE"
+    s.compiler_flags = "-O3 -DNDEBUG -DWEBP_AVAILABLE"
   else
     Pod::UI.warn "libwebp not found at #{libwebp_path}. Please vendor libwebp sources."
-    s.compiler_flags = "-O3", "-DNDEBUG"
+    s.compiler_flags = "-O3 -DNDEBUG"
   end
   s.pod_target_xcconfig = {
     "HEADER_SEARCH_PATHS" => "$(inherited) ${PODS_ROOT}/Headers/Private/React-Core",
