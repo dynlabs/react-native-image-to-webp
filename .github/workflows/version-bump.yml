@@ -74,11 +74,12 @@ jobs:
           CURRENT="${{ steps.current_version.outputs.current_version }}"
           TYPE="${{ inputs.version_type }}"
           
-          IFS='.' read -ra VERSION_PARTS <<< "$CURRENT"
-          MAJOR="${VERSION_PARTS[0]}"
-          MINOR="${VERSION_PARTS[1]}"
-          PATCH="${VERSION_PARTS[2]}"
+          # Parse version parts
+          MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+          MINOR=$(echo "$CURRENT" | cut -d. -f2)
+          PATCH=$(echo "$CURRENT" | cut -d. -f3)
           
+          # Bump version according to semver rules
           case "$TYPE" in
             major)
               MAJOR=$((MAJOR + 1))
@@ -107,10 +108,20 @@ jobs:
         run: |
           VERSION="${{ steps.new_version.outputs.new_version }}"
           DATE=$(date +"%Y-%m-%d")
+          TYPE="${{ inputs.version_type }}"
           
           # Create changelog entry if it doesn't exist
           if ! grep -q "## \[$VERSION\]" CHANGELOG.md; then
-            sed -i "1i\\## [$VERSION] - $DATE\\n\\n### Changed\\n- Version bump (${{ inputs.version_type }})\\n\\n" CHANGELOG.md
+            # Create temporary file with new entry
+            {
+              echo "## [$VERSION] - $DATE"
+              echo ""
+              echo "### Changed"
+              echo "- Version bump ($TYPE)"
+              echo ""
+              cat CHANGELOG.md
+            } > CHANGELOG.md.tmp
+            mv CHANGELOG.md.tmp CHANGELOG.md
           fi
 
       - name: Create Pull Request
