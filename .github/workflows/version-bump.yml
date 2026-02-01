@@ -2,6 +2,15 @@ name: Version Bump
 
 on:
   workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type (major, minor, patch)'
+        required: true
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -25,7 +34,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
-          registry-url: 'https://registry.npmjs.org'
 
       - name: Restore Yarn cache
         id: yarn-cache
@@ -53,12 +61,76 @@ jobs:
             .yarn/install-state.gz
           key: ${{ runner.os }}-yarn-${{ hashFiles('**/package.json', '!node_modules/**') }}
 
-      - name: Create Version Pull Request
-        id: changesets
-        uses: changesets/action@v1
+      - name: Get current version
+        id: current_version
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+
+      - name: Calculate new version
+        id: new_version
+        run: |
+          CURRENT="${{ steps.current_version.outputs.current_version }}"
+          TYPE="${{ inputs.version_type }}"
+          
+          IFS='.' read -ra VERSION_PARTS <<< "$CURRENT"
+          MAJOR="${VERSION_PARTS[0]}"
+          MINOR="${VERSION_PARTS[1]}"
+          PATCH="${VERSION_PARTS[2]}"
+          
+          case "$TYPE" in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+          
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION (bump type: $TYPE)"
+
+      - name: Update version in package.json
+        run: |
+          npm version ${{ inputs.version_type }} --no-git-tag-version
+          echo "Version updated to $(node -p "require('./package.json').version")"
+
+      - name: Update CHANGELOG
+        run: |
+          VERSION="${{ steps.new_version.outputs.new_version }}"
+          DATE=$(date +"%Y-%m-%d")
+          
+          # Create changelog entry if it doesn't exist
+          if ! grep -q "## \[$VERSION\]" CHANGELOG.md; then
+            sed -i "1i\\## [$VERSION] - $DATE\\n\\n### Changed\\n- Version bump (${{ inputs.version_type }})\\n\\n" CHANGELOG.md
+          fi
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
         with:
-          version: yarn changeset version
-          commit: 'chore: version packages'
-          title: 'chore: version packages'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore: bump version to ${{ steps.new_version.outputs.new_version }} (${{ inputs.version_type }})'
+          title: 'chore: bump version to ${{ steps.new_version.outputs.new_version }} (${{ inputs.version_type }})'
+          body: |
+            ## Version Bump
+            
+            **Type:** ${{ inputs.version_type }}
+            **Current Version:** ${{ steps.current_version.outputs.current_version }}
+            **New Version:** ${{ steps.new_version.outputs.new_version }}
+            
+            This PR follows [Semantic Versioning](https://semver.org/) guidelines:
+            - **Major** (x.0.0): Breaking changes
+            - **Minor** (x.y.0): New features, backward-compatible
+            - **Patch** (x.y.z): Bug fixes, backward-compatible
+            
+            After merging this PR, trigger the Release workflow to publish to npm.
+          branch: version-bump-${{ steps.new_version.outputs.new_version }}
+          delete-branch: true
