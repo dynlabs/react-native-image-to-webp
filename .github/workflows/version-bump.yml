@@ -130,21 +130,39 @@ jobs:
             mv CHANGELOG.md.tmp CHANGELOG.md
           fi
 
-      - name: Commit changes
+      - name: Commit and push changes
         run: |
           git add package.json CHANGELOG.md
           git commit -m "chore: bump version to ${{ steps.new_version.outputs.new_version }} (${{ inputs.version_type }})" || exit 0
-
-      - name: Push changes
-        run: |
           git push origin HEAD:version-bump-${{ steps.new_version.outputs.new_version }} --force
 
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v7
+      - name: Create Pull Request using GitHub CLI
+        run: |
+          gh pr create \
+            --title "chore: bump version to ${{ steps.new_version.outputs.new_version }} (${{ inputs.version_type }})" \
+            --body "## Version Bump
+
+          **Type:** ${{ inputs.version_type }}
+          **Current Version:** ${{ steps.current_version.outputs.current_version }}
+          **New Version:** ${{ steps.new_version.outputs.new_version }}
+
+          This PR follows [Semantic Versioning](https://semver.org/) guidelines:
+          - **Major** (x.0.0): Breaking changes
+          - **Minor** (x.y.0): New features, backward-compatible
+          - **Patch** (x.y.z): Bug fixes, backward-compatible
+
+          After merging this PR, trigger the Release workflow to publish to npm." \
+            --base main \
+            --head version-bump-${{ steps.new_version.outputs.new_version }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Create Pull Request (fallback)
+        if: failure()
+        uses: peter-evans/create-pull-request@v7
         with:
-          commit-message: 'chore: bump version to ${{ steps.new_version.outputs.new_version }} (${{ inputs.version_type }})'
+          token: ${{ secrets.GITHUB_TOKEN }}
           title: 'chore: bump version to ${{ steps.new_version.outputs.new_version }} (${{ inputs.version_type }})'
           body: |
             ## Version Bump
@@ -153,13 +171,8 @@ jobs:
             **Current Version:** ${{ steps.current_version.outputs.current_version }}
             **New Version:** ${{ steps.new_version.outputs.new_version }}
             
-            This PR follows [Semantic Versioning](https://semver.org/) guidelines:
-            - **Major** (x.0.0): Breaking changes
-            - **Minor** (x.y.0): New features, backward-compatible
-            - **Patch** (x.y.z): Bug fixes, backward-compatible
+            This PR follows [Semantic Versioning](https://semver.org/) guidelines.
             
             After merging this PR, trigger the Release workflow to publish to npm.
           branch: version-bump-${{ steps.new_version.outputs.new_version }}
           delete-branch: true
-          author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
-          committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
