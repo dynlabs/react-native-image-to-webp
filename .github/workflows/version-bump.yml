@@ -23,6 +23,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      id-token: write
 
     steps:
       - name: Checkout
@@ -145,3 +146,5 @@ jobs:
             After merging this PR, trigger the Release workflow to publish to npm.
           branch: version-bump-${{ steps.new_version.outputs.new_version }}
           delete-branch: true
+          author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
