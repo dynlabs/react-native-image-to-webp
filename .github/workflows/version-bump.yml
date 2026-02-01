@@ -130,10 +130,20 @@ jobs:
             mv CHANGELOG.md.tmp CHANGELOG.md
           fi
 
+      - name: Commit changes
+        run: |
+          git add package.json CHANGELOG.md
+          git commit -m "chore: bump version to ${{ steps.new_version.outputs.new_version }} (${{ inputs.version_type }})" || exit 0
+
+      - name: Push changes
+        run: |
+          git push origin HEAD:version-bump-${{ steps.new_version.outputs.new_version }} --force
+
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: 'chore: bump version to ${{ steps.new_version.outputs.new_version }} (${{ inputs.version_type }})'
           title: 'chore: bump version to ${{ steps.new_version.outputs.new_version }} (${{ inputs.version_type }})'
           body: |
