@@ -1,23 +1,22 @@
-name: Release
+name: Version Bump
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
-    inputs:
-      otp:
-        description: 'NPM OTP code (required if 2FA enabled)'
-        required: false
-        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Release
+  version-bump:
+    name: Version Bump
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
 
     steps:
       - name: Checkout
@@ -57,35 +56,14 @@ jobs:
             .yarn/install-state.gz
           key: ${{ runner.os }}-yarn-${{ hashFiles('**/package.json', '!node_modules/**') }}
 
-      - name: Get version from package.json
-        id: version
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Publishing version: $VERSION"
-
-      - name: Build package
-        run: yarn build
-
-      - name: Publish to npm
-        run: |
-          if [ -n "${{ inputs.otp }}" ]; then
-            npm publish --access public --otp=${{ inputs.otp }}
-          else
-            npm publish --access public
-          fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
-
-      - name: Create GitHub Release
-        uses: actions/create-release@v1
+      - name: Create Version Pull Request
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          version: yarn changeset version
+          commit: 'chore: version packages'
+          title: 'chore: version packages'
+          publish: yarn changeset publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: v${{ steps.version.outputs.version }}
-          release_name: Release v${{ steps.version.outputs.version }}
-          body: |
-            See [CHANGELOG.md](CHANGELOG.md) for details.
-          draft: false
-          prerelease: false
+          NPM_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
