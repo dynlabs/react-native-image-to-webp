@@ -1,0 +1,100 @@
+name: Build Example iOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type (debug or release)'
+        required: true
+        type: choice
+        options:
+          - debug
+          - release
+        default: debug
+      scheme:
+        description: 'Xcode scheme name'
+        required: false
+        type: string
+        default: 'ReactNativeImageToWebpExample'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-ios:
+    name: Build iOS Example
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Install CocoaPods dependencies
+        working-directory: example/ios
+        run: |
+          bundle install
+          bundle exec pod install --project-directory=.
+
+      - name: Build iOS app
+        working-directory: example/ios
+        run: |
+          SCHEME="${{ inputs.scheme }}"
+          CONFIGURATION="${{ inputs.build_type == 'release' && 'Release' || 'Debug' }}"
+          
+          xcodebuild clean build \
+            -workspace ReactNativeImageToWebpExample.xcworkspace \
+            -scheme "$SCHEME" \
+            -configuration "$CONFIGURATION" \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath ./build \
+            CODE_SIGNING_ALLOWED=NO
+          
+          echo "Build completed: $CONFIGURATION"
+
+      - name: Create iOS archive
+        if: inputs.build_type == 'release'
+        working-directory: example/ios
+        run: |
+          SCHEME="${{ inputs.scheme }}"
+          xcodebuild archive \
+            -workspace ReactNativeImageToWebpExample.xcworkspace \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -archivePath ./build/ReactNativeImageToWebpExample.xcarchive \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Export IPA (if archive exists)
+        if: inputs.build_type == 'release' && hashFiles('example/ios/build/ReactNativeImageToWebpExample.xcarchive') != ''
+        working-directory: example/ios
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath ./build/ReactNativeImageToWebpExample.xcarchive \
+            -exportPath ./build/export \
+            -exportOptionsPlist <(cat <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>development</string>
+            <key>teamID</key>
+            <string></string>
+          </dict>
+          </plist>
+          EOF
+          ) || echo "IPA export skipped (may require signing)"
+
+      - name: Upload iOS Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-example-${{ inputs.build_type }}-${{ github.sha }}
+          path: |
+            example/ios/build/**/*.app
+            example/ios/build/**/*.xcarchive
+            example/ios/build/export/**/*.ipa
+          retention-days: 30
+          if-no-files-found: warn
