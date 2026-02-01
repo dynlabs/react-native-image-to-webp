@@ -1,3 +1,8 @@
+## [0.1.1] - 2026-02-01
+
+### Changed
+- Version bump (patch)
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
