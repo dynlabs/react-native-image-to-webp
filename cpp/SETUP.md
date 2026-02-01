@@ -2,75 +2,70 @@
 
 This library uses [libwebp](https://github.com/webmproject/libwebp) (>= 1.6.0) for WebP encoding.
 
-## Vendor libwebp Sources
+## Quick Setup
 
-To complete the setup, you need to vendor libwebp sources:
+**You only need to vendor libwebp sources - everything else is already configured!**
 
-1. **Download libwebp**:
+### Option 1: Use the Script (Recommended)
 
-   ```bash
-   cd cpp
-   git clone https://github.com/webmproject/libwebp.git vendor/libwebp
-   cd vendor/libwebp
-   git checkout v1.6.0  # or latest stable version
-   ```
+**Windows (PowerShell):**
+```powershell
+.\scripts\vendor-libwebp.ps1
+```
 
-2. **Update Build Files**:
+**macOS/Linux:**
+```bash
+chmod +x scripts/vendor-libwebp.sh
+./scripts/vendor-libwebp.sh
+```
 
-   **iOS** (`ReactNativeImageToWebp.podspec`):
+**Or via yarn:**
+```bash
+yarn vendor:libwebp
+```
 
-   ```ruby
-   s.source_files += "cpp/vendor/libwebp/src/**/*.{c,h}"
-   ```
+### Option 2: Manual Setup
 
-   **Android** (`android/src/main/cpp/CMakeLists.txt`):
+```bash
+cd cpp
+git clone https://github.com/webmproject/libwebp.git vendor/libwebp
+cd vendor/libwebp
+git checkout v1.6.0
+cd ../../..
+```
 
-   ```cmake
-   # Add libwebp sources
-   file(GLOB_RECURSE WEBP_SOURCES
-     "${CMAKE_CURRENT_SOURCE_DIR}/../../../cpp/vendor/libwebp/src/enc/*.c"
-     "${CMAKE_CURRENT_SOURCE_DIR}/../../../cpp/vendor/libwebp/src/dec/*.c"
-     "${CMAKE_CURRENT_SOURCE_DIR}/../../../cpp/vendor/libwebp/src/dsp/*.c"
-     "${CMAKE_CURRENT_SOURCE_DIR}/../../../cpp/vendor/libwebp/src/utils/*.c"
-     "${CMAKE_CURRENT_SOURCE_DIR}/../../../cpp/vendor/libwebp/src/webp/*.c"
-   )
+## What Happens Next
 
-   set(SOURCES ${SOURCES} ${WEBP_SOURCES})
+Once libwebp is vendored:
 
-   # Add include directories
-   include_directories(
-     ${CMAKE_CURRENT_SOURCE_DIR}/../../../cpp/vendor/libwebp/src
-   )
-   ```
+1. **Build files auto-detect libwebp** - Both iOS (`ReactNativeImageToWebp.podspec`) and Android (`CMakeLists.txt`) automatically detect and include libwebp sources if they exist at `cpp/vendor/libwebp/src`
 
-3. **Update C++ Implementation** (`cpp/ImageToWebP.cpp`):
+2. **C++ code is ready** - The implementation in `cpp/ImageToWebP.cpp` is already complete and will compile once libwebp is present (it's behind `#ifdef WEBP_AVAILABLE`)
 
-   ```cpp
-   #include "webp/encode.h"
-   #include "webp/mux.h"
+3. **Build flags are set** - Release flags (`-O3 -DNDEBUG`) and `WEBP_AVAILABLE` macro are automatically configured
 
-   // Implement encodeWebP() using libwebp API
-   ```
+## Verification
 
-## Implementation Notes
+After vendoring, verify libwebp is detected:
 
-The `cpp/ImageToWebP.cpp` file currently has a placeholder implementation. You need to implement `encodeWebP()` using libwebp's advanced API:
+- **iOS**: Run `pod install` in `example/ios` - you should see libwebp sources included
+- **Android**: Build will show "libwebp found, including sources" message
 
-1. Initialize `WebPConfig` with `WebPConfigInit()` and `WebPConfigPreset()`
-2. Set config options (quality, method, lossless, etc.)
-3. Create `WebPPicture` and import RGBA data with `WebPPictureImportRGBA()`
-4. Use `WebPMemoryWriter` for output buffering
-5. Call `WebPEncode()` to encode
-6. Write encoded data to file
-7. Clean up all libwebp structures
+## Current Status
+
+✅ Build files configured (auto-detect libwebp)  
+✅ C++ implementation ready (behind `#ifdef WEBP_AVAILABLE`)  
+✅ Compiler flags configured  
+⏳ **You need to:** Vendor libwebp sources (run the script above)
+
+## Implementation Details
+
+The `cpp/ImageToWebP.cpp` file uses libwebp's advanced API:
+
+1. `WebPConfigInit()` and `WebPConfigPreset()` for configuration
+2. `WebPPictureInit()` and `WebPPictureImportRGBA()` for image data
+3. `WebPMemoryWriter` for output buffering
+4. `WebPEncode()` for encoding
+5. Proper cleanup of all libwebp structures
 
 See libwebp documentation: https://developers.google.com/speed/webp/docs/api
-
-## Build Flags
-
-Both iOS and Android use release flags:
-
-- `-O3`: Maximum optimization
-- `-DNDEBUG`: Disable debug assertions
-
-These are already configured in the build files.
