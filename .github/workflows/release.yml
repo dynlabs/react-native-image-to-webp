@@ -77,38 +77,6 @@ jobs:
         run: yarn build
 
       - name: Extract changelog for version
-        id: changelog
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          
-          # Extract changelog section for this version using Python for reliability
-          python3 << 'EOF'
-          import re
-          import sys
-          
-          version = "${{ steps.version.outputs.version }}"
-          
-          try:
-              with open('CHANGELOG.md', 'r', encoding='utf-8') as f:
-                  content = f.read()
-              
-              # Find the section for this version
-              pattern = rf'## \[{re.escape(version)}\](.*?)(?=## \[|\Z)'
-              match = re.search(pattern, content, re.DOTALL)
-              
-              if match:
-                  notes = match.group(1).strip()
-                  # Remove leading/trailing whitespace and empty lines
-                  notes = '\n'.join(line for line in notes.split('\n') if line.strip())
-                  print(notes)
-              else:
-                  print(f"## Changes\n\nVersion {version} release.")
-          except Exception as e:
-              print(f"## Changes\n\nVersion {version} release.\n\n(Error extracting changelog: {e})")
-          EOF
-        continue-on-error: true
-
-      - name: Get changelog content
         id: changelog_content
         run: |
           CHANGELOG_TEXT=$(python3 << 'EOF'
@@ -117,16 +85,18 @@ jobs:
           try:
               with open('CHANGELOG.md', 'r', encoding='utf-8') as f:
                   content = f.read()
+              # Find the section for this version (from ## [version] to next ## [version] or end)
               pattern = rf'## \[{re.escape(version)}\](.*?)(?=## \[|\Z)'
               match = re.search(pattern, content, re.DOTALL)
               if match:
                   notes = match.group(1).strip()
+                  # Clean up: remove empty lines and trim
                   notes = '\n'.join(line for line in notes.split('\n') if line.strip())
                   print(notes)
               else:
                   print(f"Version {version} release.")
-          except:
-              print(f"Version {version} release.")
+          except Exception as e:
+              print(f"Version {version} release.\n\n(Error extracting changelog: {e})")
           EOF
           )
           
