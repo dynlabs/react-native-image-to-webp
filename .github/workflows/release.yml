@@ -64,8 +64,49 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Publishing version: $VERSION"
 
+      - name: Verify version not already published
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if npm view "@dynlabs/react-native-image-to-webp@$VERSION" version > /dev/null 2>&1; then
+            echo "Error: Version $VERSION is already published on npm"
+            exit 1
+          fi
+          echo "Version $VERSION is not published, proceeding..."
+
       - name: Build package
         run: yarn build
+
+      - name: Extract changelog for version
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          # Extract changelog section for this version
+          if grep -q "## \[$VERSION\]" CHANGELOG.md; then
+            # Extract from ## [version] to next ## [version] or end of file
+            awk "/^## \[$VERSION\]/,/^## \[/{if (!/^## \[$VERSION\]/ && /^## \[/) exit; if (/^## \[$VERSION\]/) next}1" CHANGELOG.md | \
+            sed '/^## \[/,$d' | \
+            sed '1d' > release_notes.md
+          else
+            echo "No changelog entry found for version $VERSION" > release_notes.md
+          fi
+          
+          # Read release notes
+          RELEASE_NOTES=$(cat release_notes.md)
+          # Escape for GitHub output
+          RELEASE_NOTES="${RELEASE_NOTES//'%'/'%25'}"
+          RELEASE_NOTES="${RELEASE_NOTES//$'\n'/'%0A'}"
+          RELEASE_NOTES="${RELEASE_NOTES//$'\r'/'%0D'}"
+          echo "release_notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$RELEASE_NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create git tag
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$VERSION" -m "Release v$VERSION"
+          git push origin "v$VERSION"
 
       - name: Publish to npm
         run: |
@@ -79,13 +120,20 @@ jobs:
           NPM_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
 
       - name: Create GitHub Release
-        uses: ncipollo/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v2
         with:
-          tag: v${{ steps.version.outputs.version }}
+          tag_name: v${{ steps.version.outputs.version }}
           name: Release v${{ steps.version.outputs.version }}
           body: |
-            See [CHANGELOG.md](CHANGELOG.md) for details.
+            ${{ steps.changelog.outputs.release_notes }}
+            
+            ---
+            
+            **Full Changelog**: https://github.com/${{ github.repository }}/compare/v${{ steps.version.outputs.version }}^...v${{ steps.version.outputs.version }}
+            
+            **Install**: `npm install @dynlabs/react-native-image-to-webp@${{ steps.version.outputs.version }}`
           draft: false
           prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
