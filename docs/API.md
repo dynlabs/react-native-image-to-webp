@@ -44,14 +44,14 @@ Converts an image file to WebP format.
 
 ```typescript
 type ConvertOptions = {
-  inputPath: string;          // Required: Path to input image file
-  outputPath?: string;        // Optional: Output path (default: inputPath with .webp extension)
-  preset?: ConvertPreset;     // Optional: Preset name (default: 'balanced')
-  maxLongEdge?: number;       // Optional: Maximum dimension for resize (preserves aspect ratio)
-  quality?: number;           // Optional: Quality 0-100 (overrides preset)
-  method?: number;            // Optional: Compression method 0-6 (overrides preset)
-  lossless?: boolean;         // Optional: Use lossless encoding (overrides preset)
-  stripMetadata?: boolean;    // Optional: Strip EXIF metadata (default: true)
+  inputPath: string; // Required: Path to input image file
+  outputPath?: string; // Optional: Output path (default: inputPath with .webp extension)
+  preset?: ConvertPreset; // Optional: Preset name (default: 'balanced')
+  maxLongEdge?: number; // Optional: Maximum dimension for resize (preserves aspect ratio)
+  quality?: number; // Optional: Quality 0-100 (overrides preset)
+  method?: number; // Optional: Compression method 0-6 (overrides preset)
+  lossless?: boolean; // Optional: Use lossless encoding (overrides preset)
+  stripMetadata?: boolean; // Optional: Strip EXIF metadata (default: true)
 };
 ```
 
@@ -70,10 +70,10 @@ type ConvertOptions = {
 
 ```typescript
 type ConvertResult = {
-  outputPath: string;    // Path to the created WebP file
-  width: number;         // Image width in pixels
-  height: number;        // Image height in pixels
-  sizeBytes: number;     // Output file size in bytes
+  outputPath: string; // Path to the created WebP file
+  width: number; // Image width in pixels
+  height: number; // Image height in pixels
+  sizeBytes: number; // Output file size in bytes
 };
 ```
 
@@ -91,7 +91,11 @@ type ConvertResult = {
 #### Example
 
 ```typescript
-import { convertImageToWebP, ImageToWebPError, ERROR_CODES } from '@dynlabs/react-native-image-to-webp';
+import {
+  convertImageToWebP,
+  ImageToWebPError,
+  ERROR_CODES,
+} from '@dynlabs/react-native-image-to-webp';
 
 try {
   const result = await convertImageToWebP({
@@ -206,7 +210,7 @@ const result = await convertImageToWebP({
 ```typescript
 const result = await convertImageToWebP({
   inputPath: '/path/to/large-image.jpg',
-  maxLongEdge: 2048,  // Resize to max 2048px on longest edge
+  maxLongEdge: 2048, // Resize to max 2048px on longest edge
 });
 ```
 
@@ -247,8 +251,8 @@ await convertImageToWebP({
 await convertImageToWebP({
   inputPath: '/path/to/image.jpg',
   preset: 'balanced',
-  quality: 90,  // Override preset quality
-  maxLongEdge: 1024,  // Add resize
+  quality: 90, // Override preset quality
+  maxLongEdge: 1024, // Add resize
 });
 ```
 
@@ -266,6 +270,7 @@ await convertImageToWebP({
 ## Supported Input Formats
 
 ### iOS
+
 - JPEG
 - PNG
 - HEIC/HEIF
@@ -274,6 +279,7 @@ await convertImageToWebP({
 - WebP (re-encoding)
 
 ### Android
+
 - JPEG
 - PNG
 - WebP
@@ -300,7 +306,11 @@ await convertImageToWebP({
 ## Error Handling
 
 ```typescript
-import { convertImageToWebP, ImageToWebPError, ERROR_CODES } from '@dynlabs/react-native-image-to-webp';
+import {
+  convertImageToWebP,
+  ImageToWebPError,
+  ERROR_CODES,
+} from '@dynlabs/react-native-image-to-webp';
 
 try {
   const result = await convertImageToWebP({ inputPath: '/invalid/path.jpg' });

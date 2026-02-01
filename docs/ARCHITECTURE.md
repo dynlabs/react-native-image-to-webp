@@ -57,12 +57,14 @@ Result Metadata Return
 ### Detailed Flow
 
 1. **JavaScript Layer** (`src/index.tsx`)
+
    - User calls `convertImageToWebP(options)`
    - Input validation occurs
    - Preset defaults are applied
    - Options are passed to TurboModule
 
 2. **TurboModule Bridge** (`src/NativeReactNativeImageToWebp.ts`)
+
    - Codegen-generated TypeScript interface
    - Bridges to native module via React Native's TurboModule system
    - Returns Promise with result
@@ -70,6 +72,7 @@ Result Metadata Return
 3. **Native Module Layer**
 
    **iOS** (`ios/ReactNativeImageToWebp.mm`):
+
    - Runs on background queue (dispatch queue)
    - Uses `CGImageSource` to decode image
    - Applies EXIF orientation via CoreGraphics transforms
@@ -80,6 +83,7 @@ Result Metadata Return
    - Returns metadata
 
    **Android** (`android/.../ReactNativeImageToWebpModule.kt`):
+
    - Runs on dedicated executor thread
    - Uses `ImageDecoder` (API 28+) or `BitmapFactory` (fallback)
    - Applies EXIF orientation (via ExifInterface)
@@ -125,11 +129,13 @@ libwebp sources are vendored at `cpp/vendor/libwebp/` (version >= 1.6.0).
 ### Build Integration
 
 **iOS**:
+
 - Podspec includes libwebp source files
 - Compiled as part of the module with release flags (`-O3 -DNDEBUG`)
 - Linked statically into the module
 
 **Android**:
+
 - CMakeLists.txt includes libwebp sources
 - Compiled as static library or directly into the shared library
 - Linked via CMake `target_link_libraries`

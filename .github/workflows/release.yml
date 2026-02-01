@@ -42,7 +42,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.yarn-cache.outputs.cache-hit != 'true'
-        run: yarn install --mode=update-lockfile
+        run: yarn install
         env:
           YARN_ENABLE_IMMUTABLE_INSTALLS: false
 

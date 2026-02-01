@@ -19,11 +19,13 @@ Your React Native library is ready. Here's what to do next:
 ### 1. Vendor libwebp (Required)
 
 **Easiest way:**
+
 ```bash
 yarn vendor:libwebp
 ```
 
 **Or manually:**
+
 ```bash
 # macOS/Linux
 ./scripts/vendor-libwebp.sh
@@ -88,15 +90,18 @@ See [docs/RELEASE.md](docs/RELEASE.md) for details.
 ## 🐛 Troubleshooting
 
 **libwebp not found:**
+
 - Ensure you ran `yarn vendor:libwebp` or the script manually
 - Check that `cpp/vendor/libwebp/src/webp/encode.h` exists
 
 **Build errors:**
+
 - Clean: `yarn clean`
 - iOS: `cd example/ios && pod install`
 - Android: `cd example/android && ./gradlew clean`
 
 **Conversion fails:**
+
 - Check input file path is correct
 - Verify file permissions
 - See error codes in [docs/API.md](docs/API.md)

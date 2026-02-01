@@ -58,37 +58,37 @@ console.log(`Dimensions: ${result.width}×${result.height}`);
 
 #### Options
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `inputPath` | `string` | ✅ | - | Path to input image file |
-| `outputPath` | `string` | ❌ | Auto-derived | Output WebP file path |
-| `preset` | `ConvertPreset` | ❌ | `'balanced'` | Preset configuration |
-| `maxLongEdge` | `number` | ❌ | - | Max dimension (preserves aspect ratio) |
-| `quality` | `number` | ❌ | Preset default | Quality 0-100 (overrides preset) |
-| `method` | `number` | ❌ | Preset default | Compression method 0-6 (overrides preset) |
-| `lossless` | `boolean` | ❌ | Preset default | Use lossless encoding (overrides preset) |
-| `stripMetadata` | `boolean` | ❌ | `true` | Strip EXIF metadata |
+| Parameter       | Type            | Required | Default        | Description                               |
+| --------------- | --------------- | -------- | -------------- | ----------------------------------------- |
+| `inputPath`     | `string`        | ✅       | -              | Path to input image file                  |
+| `outputPath`    | `string`        | ❌       | Auto-derived   | Output WebP file path                     |
+| `preset`        | `ConvertPreset` | ❌       | `'balanced'`   | Preset configuration                      |
+| `maxLongEdge`   | `number`        | ❌       | -              | Max dimension (preserves aspect ratio)    |
+| `quality`       | `number`        | ❌       | Preset default | Quality 0-100 (overrides preset)          |
+| `method`        | `number`        | ❌       | Preset default | Compression method 0-6 (overrides preset) |
+| `lossless`      | `boolean`       | ❌       | Preset default | Use lossless encoding (overrides preset)  |
+| `stripMetadata` | `boolean`       | ❌       | `true`         | Strip EXIF metadata                       |
 
 #### Result
 
 ```typescript
 {
-  outputPath: string;    // Path to created WebP file
-  width: number;         // Image width in pixels
-  height: number;        // Image height in pixels
-  sizeBytes: number;     // Output file size in bytes
+  outputPath: string; // Path to created WebP file
+  width: number; // Image width in pixels
+  height: number; // Image height in pixels
+  sizeBytes: number; // Output file size in bytes
 }
 ```
 
 ## Presets
 
-| Preset | Quality | Method | Use Case |
-|-------|---------|--------|----------|
-| `balanced` | 80 | 3 | **Default**. General-purpose, good quality/size balance |
-| `small` | 74 | 5 | Optimized for smaller file sizes |
-| `fast` | 78 | 1 | Faster encoding, slightly larger files |
-| `lossless` | - | 4 | Perfect quality, larger files |
-| `document` | 82 | 4 | Documents, images with text/transparency |
+| Preset     | Quality | Method | Use Case                                                |
+| ---------- | ------- | ------ | ------------------------------------------------------- |
+| `balanced` | 80      | 3      | **Default**. General-purpose, good quality/size balance |
+| `small`    | 74      | 5      | Optimized for smaller file sizes                        |
+| `fast`     | 78      | 1      | Faster encoding, slightly larger files                  |
+| `lossless` | -       | 4      | Perfect quality, larger files                           |
+| `document` | 82      | 4      | Documents, images with text/transparency                |
 
 ### Examples
 
@@ -129,11 +129,12 @@ Use `maxLongEdge` to resize images while preserving aspect ratio:
 // Resize so longest edge is max 2048px
 await convertImageToWebP({
   inputPath: '/path/to/large-image.jpg',
-  maxLongEdge: 2048,  // If image is 4000×3000, becomes 2048×1536
+  maxLongEdge: 2048, // If image is 4000×3000, becomes 2048×1536
 });
 ```
 
 **Recommendation**: Always use `maxLongEdge` for better performance and smaller files. Common values:
+
 - **Thumbnails**: 512
 - **Mobile display**: 1024
 - **Retina display**: 2048 (recommended default)
@@ -142,7 +143,11 @@ await convertImageToWebP({
 ## Error Handling
 
 ```typescript
-import { convertImageToWebP, ImageToWebPError, ERROR_CODES } from '@dynlabs/react-native-image-to-webp';
+import {
+  convertImageToWebP,
+  ImageToWebPError,
+  ERROR_CODES,
+} from '@dynlabs/react-native-image-to-webp';
 
 try {
   const result = await convertImageToWebP({ inputPath: '/path/to/image.jpg' });
@@ -176,9 +181,11 @@ try {
 ## Supported Formats
 
 ### iOS
+
 - JPEG, PNG, HEIC/HEIF, TIFF, GIF (first frame), WebP
 
 ### Android
+
 - JPEG, PNG, WebP, HEIF (API 28+), GIF (first frame)
 
 ## Performance

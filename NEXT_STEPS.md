@@ -7,12 +7,14 @@ This guide walks you through completing the libwebp integration to make the libr
 ### Option A: Using the Script (Recommended)
 
 **On macOS/Linux:**
+
 ```bash
 chmod +x scripts/vendor-libwebp.sh
 ./scripts/vendor-libwebp.sh
 ```
 
 **On Windows (PowerShell):**
+
 ```powershell
 .\scripts\vendor-libwebp.ps1
 ```
@@ -30,6 +32,7 @@ cd ../../..
 ## Step 2: Update C++ Implementation
 
 1. **Uncomment libwebp includes** in `cpp/ImageToWebP.cpp`:
+
    ```cpp
    #include "webp/encode.h"
    #include "webp/mux.h"
@@ -70,7 +73,7 @@ set(SOURCES
 Update `ReactNativeImageToWebp.podspec`:
 
 ```ruby
-s.source_files = "ios/**/*.{h,m,mm,swift,cpp}", 
+s.source_files = "ios/**/*.{h,m,mm,swift,cpp}",
                  "cpp/**/*.{h,cpp}",
                  "cpp/vendor/libwebp/src/**/*.{c,h}"
 ```
@@ -78,16 +81,18 @@ s.source_files = "ios/**/*.{h,m,mm,swift,cpp}",
 ## Step 5: Test the Integration
 
 1. **Clean builds:**
+
    ```bash
    # iOS
    cd example/ios && pod install && cd ../..
    yarn example clean
-   
+
    # Android
    cd example/android && ./gradlew clean && cd ../..
    ```
 
 2. **Build example app:**
+
    ```bash
    yarn example:ios
    # or
@@ -110,26 +115,31 @@ s.source_files = "ios/**/*.{h,m,mm,swift,cpp}",
 ### Build Errors
 
 **"webp/encode.h: No such file"**
+
 - Check that libwebp is vendored correctly
 - Verify include paths in CMakeLists.txt and podspec
 
 **"Undefined symbols"**
+
 - Ensure all libwebp source files are included in the build
 - Check that WEBP_SOURCES includes all necessary directories
 
 **iOS: "Module not found"**
+
 - Run `pod install` in example/ios
 - Clean build folder in Xcode
 
 **Android: CMake errors**
+
 - Ensure CMake version >= 3.22.1
 - Check that all libwebp .c files are being compiled
 
 ### Runtime Errors
 
 **"ENCODE_FAILED"**
+
 - Check that input image is valid
-- Verify RGBA buffer is correct size (width * height * 4)
+- Verify RGBA buffer is correct size (width _ height _ 4)
 - Check file permissions for output path
 
 ## Additional Notes

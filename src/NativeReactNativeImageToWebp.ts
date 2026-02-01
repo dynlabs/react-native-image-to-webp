@@ -1,6 +1,11 @@
 import { TurboModuleRegistry, type TurboModule } from 'react-native';
 
-export type ConvertPreset = 'balanced' | 'small' | 'fast' | 'lossless' | 'document';
+export type ConvertPreset =
+  | 'balanced'
+  | 'small'
+  | 'fast'
+  | 'lossless'
+  | 'document';
 
 export interface ConvertOptions {
   inputPath: string;

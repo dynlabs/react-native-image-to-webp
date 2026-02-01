@@ -7,6 +7,7 @@ This library uses [libwebp](https://github.com/webmproject/libwebp) (>= 1.6.0) f
 To complete the setup, you need to vendor libwebp sources:
 
 1. **Download libwebp**:
+
    ```bash
    cd cpp
    git clone https://github.com/webmproject/libwebp.git vendor/libwebp
@@ -17,11 +18,13 @@ To complete the setup, you need to vendor libwebp sources:
 2. **Update Build Files**:
 
    **iOS** (`ReactNativeImageToWebp.podspec`):
+
    ```ruby
    s.source_files += "cpp/vendor/libwebp/src/**/*.{c,h}"
    ```
 
    **Android** (`android/src/main/cpp/CMakeLists.txt`):
+
    ```cmake
    # Add libwebp sources
    file(GLOB_RECURSE WEBP_SOURCES
@@ -31,9 +34,9 @@ To complete the setup, you need to vendor libwebp sources:
      "${CMAKE_CURRENT_SOURCE_DIR}/../../../cpp/vendor/libwebp/src/utils/*.c"
      "${CMAKE_CURRENT_SOURCE_DIR}/../../../cpp/vendor/libwebp/src/webp/*.c"
    )
-   
+
    set(SOURCES ${SOURCES} ${WEBP_SOURCES})
-   
+
    # Add include directories
    include_directories(
      ${CMAKE_CURRENT_SOURCE_DIR}/../../../cpp/vendor/libwebp/src
@@ -41,10 +44,11 @@ To complete the setup, you need to vendor libwebp sources:
    ```
 
 3. **Update C++ Implementation** (`cpp/ImageToWebP.cpp`):
+
    ```cpp
    #include "webp/encode.h"
    #include "webp/mux.h"
-   
+
    // Implement encodeWebP() using libwebp API
    ```
 
@@ -65,6 +69,7 @@ See libwebp documentation: https://developers.google.com/speed/webp/docs/api
 ## Build Flags
 
 Both iOS and Android use release flags:
+
 - `-O3`: Maximum optimization
 - `-DNDEBUG`: Disable debug assertions
 

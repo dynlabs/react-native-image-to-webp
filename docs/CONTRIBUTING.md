@@ -15,17 +15,20 @@ Thank you for your interest in contributing to `@dynlabs/react-native-image-to-w
 ### Initial Setup
 
 1. Clone the repository:
+
 ```bash
 git clone <repo-url>
 cd react-native-image-to-webp
 ```
 
 2. Install dependencies:
+
 ```bash
 yarn install
 ```
 
 3. Build the library:
+
 ```bash
 yarn build
 ```
@@ -35,11 +38,13 @@ yarn build
 The example app is in the `example/` directory.
 
 **iOS**:
+
 ```bash
 yarn example:ios
 ```
 
 **Android**:
+
 ```bash
 yarn example:android
 ```
@@ -93,6 +98,7 @@ We use [Conventional Commits](https://www.conventionalcommits.org/):
 - `chore:` Other changes
 
 Examples:
+
 ```
 feat: add support for HEIC format on iOS
 fix: handle EXIF orientation correctly on Android

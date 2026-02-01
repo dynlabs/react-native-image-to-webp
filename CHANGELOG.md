@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
 - Initial release with TurboModule support
 - Image to WebP conversion with presets
 - Resize support via maxLongEdge

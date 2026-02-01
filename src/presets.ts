@@ -1,4 +1,7 @@
-import type { ConvertOptions, ConvertPreset } from './NativeReactNativeImageToWebp';
+import type {
+  ConvertOptions,
+  ConvertPreset,
+} from './NativeReactNativeImageToWebp';
 
 interface PresetConfig {
   quality?: number;

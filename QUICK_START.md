@@ -5,16 +5,19 @@ Get the library up and running in 5 minutes.
 ## 1. Vendor libwebp
 
 **macOS/Linux:**
+
 ```bash
 chmod +x scripts/vendor-libwebp.sh && ./scripts/vendor-libwebp.sh
 ```
 
 **Windows:**
+
 ```powershell
 .\scripts\vendor-libwebp.ps1
 ```
 
 **Manual:**
+
 ```bash
 cd cpp
 git clone https://github.com/webmproject/libwebp.git vendor/libwebp
@@ -34,12 +37,14 @@ yarn install
 ## 4. Build Example App
 
 **iOS:**
+
 ```bash
 cd example/ios && pod install && cd ../..
 yarn example:ios
 ```
 
 **Android:**
+
 ```bash
 yarn example:android
 ```
@@ -54,15 +59,18 @@ yarn example:android
 ## Troubleshooting
 
 **"libwebp not found" warning:**
+
 - Ensure libwebp is cloned to `cpp/vendor/libwebp/`
 - Check that `cpp/vendor/libwebp/src/webp/encode.h` exists
 
 **Build errors:**
+
 - Clean build: `yarn clean`
 - iOS: Delete `example/ios/Pods` and run `pod install`
 - Android: `cd example/android && ./gradlew clean`
 
 **Conversion fails:**
+
 - Verify input image path is correct
 - Check file permissions
 - Ensure output directory exists

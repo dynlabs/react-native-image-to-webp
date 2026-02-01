@@ -31,9 +31,10 @@ When making changes that should trigger a release:
 4. Commit the changeset file
 
 Example changeset file (`.changeset/foo-bar.md`):
+
 ```markdown
 ---
-"@dynlabs/react-native-image-to-webp": patch
+'@dynlabs/react-native-image-to-webp': patch
 ---
 
 Fix EXIF orientation handling on Android
@@ -63,6 +64,7 @@ If you need to release manually:
 The package is published to the `@dynlabs` scope (private/restricted access).
 
 **Requirements**:
+
 - `NODE_AUTH_TOKEN` secret in GitHub Actions (npm token)
 - `publishConfig.access` set to `"restricted"` in `package.json`
 
@@ -82,6 +84,7 @@ The CHANGELOG is automatically updated by Changesets. It follows [Keep a Changel
 ## GitHub Releases
 
 GitHub Releases are automatically created with:
+
 - Version tag (e.g., `v1.2.3`)
 - Release notes from changesets
 - Link to CHANGELOG

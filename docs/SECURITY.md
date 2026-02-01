@@ -20,6 +20,7 @@ Instead, please report it via one of these methods:
 3. **Direct Contact**: Contact maintainers directly
 
 Please include:
+
 - Description of the vulnerability
 - Steps to reproduce
 - Potential impact

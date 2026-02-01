@@ -14,7 +14,6 @@ import {
   convertImageToWebP,
   type ConvertPreset,
   ImageToWebPError,
-  ERROR_CODES,
 } from '@dynlabs/react-native-image-to-webp';
 
 const PRESETS: ConvertPreset[] = [
@@ -37,7 +36,8 @@ interface ConversionResult {
 export default function App(): React.JSX.Element {
   const [inputPath, setInputPath] = useState<string>('');
   const [maxLongEdge, setMaxLongEdge] = useState<string>('2048');
-  const [selectedPreset, setSelectedPreset] = useState<ConvertPreset>('balanced');
+  const [selectedPreset, setSelectedPreset] =
+    useState<ConvertPreset>('balanced');
   const [isConverting, setIsConverting] = useState<boolean>(false);
   const [results, setResults] = useState<ConversionResult[]>([]);
   const [outputImageUri, setOutputImageUri] = useState<string | null>(null);
@@ -84,7 +84,9 @@ export default function App(): React.JSX.Element {
 
       Alert.alert(
         'Success',
-        `Converted to WebP!\nSize: ${(result.sizeBytes / 1024).toFixed(2)} KB\nDuration: ${duration}ms`
+        `Converted to WebP!\nSize: ${(result.sizeBytes / 1024).toFixed(
+          2
+        )} KB\nDuration: ${duration}ms`
       );
     } catch (error) {
       let errorMessage = 'Unknown error';
@@ -164,7 +166,8 @@ export default function App(): React.JSX.Element {
             autoCorrect={false}
           />
           <Text style={styles.hintText}>
-            Enter a file path to an image. On iOS, use file:// URIs. On Android, use absolute paths.
+            Enter a file path to an image. On iOS, use file:// URIs. On Android,
+            use absolute paths.
           </Text>
         </View>
 
@@ -207,7 +210,11 @@ export default function App(): React.JSX.Element {
           </View>
 
           <TouchableOpacity
-            style={[styles.button, styles.convertButton, isConverting && styles.buttonDisabled]}
+            style={[
+              styles.button,
+              styles.convertButton,
+              isConverting && styles.buttonDisabled,
+            ]}
             onPress={() => convertImage(selectedPreset)}
             disabled={isConverting}
           >
@@ -230,7 +237,10 @@ export default function App(): React.JSX.Element {
         {outputImageUri && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Output Image</Text>
-            <Image source={{ uri: outputImageUri }} style={styles.outputImage} />
+            <Image
+              source={{ uri: outputImageUri }}
+              style={styles.outputImage}
+            />
             <Text style={styles.pathText} numberOfLines={2}>
               {outputImageUri}
             </Text>
