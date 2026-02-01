@@ -131,5 +131,5 @@ jobs:
       - name: Commit and push to main
         run: |
           git add package.json CHANGELOG.md
-          git commit -m "chore: bump version to ${{ steps.new_version.outputs.new_version }} (${{ inputs.version_type }})"
+          git commit -m "chore: Version bumped to ${{ steps.new_version.outputs.new_version }} (${{ inputs.version_type }})"
           git push origin main
