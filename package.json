@@ -62,7 +62,7 @@
   "homepage": "#readme",
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
-    "access": "restricted"
+    "access": "public"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.1",
