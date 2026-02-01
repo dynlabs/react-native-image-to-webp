@@ -2,11 +2,6 @@ name: Release
 
 on:
   workflow_dispatch:
-    inputs:
-      otp:
-        description: 'NPM OTP code (required if 2FA enabled)'
-        required: false
-        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -115,12 +110,7 @@ jobs:
           git push origin "v$VERSION"
 
       - name: Publish to npm
-        run: |
-          if [ -n "${{ inputs.otp }}" ]; then
-            npm publish --access public --otp=${{ inputs.otp }}
-          else
-            npm publish --access public
-          fi
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
           NPM_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
