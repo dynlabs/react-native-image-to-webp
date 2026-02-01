@@ -14,6 +14,8 @@ We follow [Semantic Versioning](https://semver.org/) (SemVer):
 
 We use [Changesets](https://github.com/changesets/changesets) for version management and release automation.
 
+**Note:** For the initial release (v0.1.0), publish manually. Changesets will handle all subsequent releases.
+
 ### How It Works
 
 1. **During Development**: Contributors add changeset files describing their changes
