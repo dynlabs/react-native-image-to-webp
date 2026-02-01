@@ -9,17 +9,20 @@ This library uses [libwebp](https://github.com/webmproject/libwebp) (>= 1.6.0) f
 ### Option 1: Use the Script (Recommended)
 
 **Windows (PowerShell):**
+
 ```powershell
 .\scripts\vendor-libwebp.ps1
 ```
 
 **macOS/Linux:**
+
 ```bash
 chmod +x scripts/vendor-libwebp.sh
 ./scripts/vendor-libwebp.sh
 ```
 
 **Or via yarn:**
+
 ```bash
 yarn vendor:libwebp
 ```
