@@ -100,6 +100,11 @@ jobs:
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "New version: $NEW_VERSION (bump type: $TYPE)"
 
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
       - name: Update version in package.json
         run: |
           npm version ${{ inputs.version_type }} --no-git-tag-version
