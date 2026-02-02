@@ -21,8 +21,7 @@ react-native-image-to-webp/
 │       └── CMakeLists.txt
 ├── cpp/                          # Shared C++ code
 │   ├── ImageToWebP.h
-│   ├── ImageToWebP.cpp           # WebP encoding wrapper
-│   └── vendor/libwebp/           # Vendored libwebp sources (>= 1.6.0)
+│   └── ImageToWebP.cpp           # WebP encoding wrapper (uses libwebp)
 └── example/                      # Example React Native app
 ```
 
@@ -122,23 +121,20 @@ Result Metadata Return
 
 ## libwebp Integration
 
-### Vendor Location
-
-libwebp sources are vendored at `cpp/vendor/libwebp/` (version >= 1.6.0).
-
-### Build Integration
+### Dependency Management
 
 **iOS**:
 
-- Podspec includes libwebp source files
+- Uses CocoaPods dependency `libwebp ~> 1.6`
+- Automatically installed via `pod install`
 - Compiled as part of the module with release flags (`-O3 -DNDEBUG`)
 - Linked statically into the module
 
 **Android**:
 
-- CMakeLists.txt includes libwebp sources
-- Compiled as static library or directly into the shared library
-- Linked via CMake `target_link_libraries`
+- Uses CMake FetchContent to automatically download libwebp during build
+- Compiled directly into the shared library
+- All source files compiled with the module
 
 ### API Usage
 

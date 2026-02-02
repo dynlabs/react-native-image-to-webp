@@ -11,6 +11,7 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.WritableMap
 import java.io.File
+import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -76,8 +77,9 @@ class ReactNativeImageToWebpModule(reactContext: ReactApplicationContext) :
     val inputPath = options.getString("inputPath")
       ?: throw IllegalArgumentException("inputPath is required")
 
+    val preset = options.getString("preset") ?: "balanced"
     val outputPath = options.getString("outputPath")
-      ?: deriveOutputPath(inputPath)
+      ?: deriveOutputPath(inputPath, preset)
 
     val maxLongEdge = if (options.hasKey("maxLongEdge")) {
       options.getDouble("maxLongEdge").toInt()
@@ -166,6 +168,9 @@ class ReactNativeImageToWebpModule(reactContext: ReactApplicationContext) :
         // Use ImageDecoder for modern Android
         val source = ImageDecoder.createSource(file)
         val decoder = ImageDecoder.decodeBitmap(source) { decoder, info, source ->
+          // Force software bitmap to avoid HARDWARE config which doesn't support getPixels()
+          decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE)
+          
           // Apply sampling if maxLongEdge is specified
           maxLongEdge?.let { maxEdge ->
             val originalWidth = info.size.width
@@ -177,7 +182,32 @@ class ReactNativeImageToWebpModule(reactContext: ReactApplicationContext) :
             }
           }
         }
-        decoder
+        
+        // Ensure bitmap is not hardware-accelerated and can be accessed
+        var bitmap = decoder
+        if (bitmap.config == Bitmap.Config.HARDWARE) {
+          // Convert hardware bitmap to software bitmap
+          val softwareBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
+          bitmap.recycle()
+          bitmap = softwareBitmap
+        }
+        
+        // Final resize if still needed (setTargetSampleSize is approximate)
+        maxLongEdge?.let { maxEdge ->
+          val currentMax = maxOf(bitmap.width, bitmap.height)
+          if (currentMax > maxEdge) {
+            val scale = maxEdge.toFloat() / currentMax
+            val newWidth = (bitmap.width * scale).toInt()
+            val newHeight = (bitmap.height * scale).toInt()
+            val resized = Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+            if (resized != bitmap) {
+              bitmap.recycle()
+              bitmap = resized
+            }
+          }
+        }
+        
+        bitmap
       } else {
         // Fallback to BitmapFactory
         val options = BitmapFactory.Options().apply {
@@ -198,6 +228,14 @@ class ReactNativeImageToWebpModule(reactContext: ReactApplicationContext) :
 
         var bitmap = BitmapFactory.decodeFile(file.absolutePath, options)
           ?: return null
+
+        // Ensure bitmap is not hardware-accelerated and can be accessed
+        if (bitmap.config == Bitmap.Config.HARDWARE) {
+          // Convert hardware bitmap to software bitmap
+          val softwareBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
+          bitmap.recycle()
+          bitmap = softwareBitmap
+        }
 
         // Apply EXIF orientation if needed
         bitmap = applyExifOrientation(bitmap, file)
@@ -249,7 +287,7 @@ class ReactNativeImageToWebpModule(reactContext: ReactApplicationContext) :
     return rgbaData
   }
 
-  private fun deriveOutputPath(inputPath: String): String {
+  private fun deriveOutputPath(inputPath: String, preset: String): String {
     val inputFile = File(inputPath)
     val directory = inputFile.parent
     val filename = inputFile.nameWithoutExtension

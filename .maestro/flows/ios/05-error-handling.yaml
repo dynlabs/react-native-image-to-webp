@@ -1,0 +1,39 @@
+appId: dynlabs.reactnativeimagetowebp.example
+---
+# Test Error Handling - iOS
+# Tests: Error handling for invalid inputs
+
+- launchApp
+- assertVisible: "Image to WebP Converter"
+
+# Test error handling - try to convert without selecting image
+- scroll
+- assertVisible: "Convert"
+- tapOn: "Convert.*balanced|Convert"
+- waitForAnimationToEnd:
+    timeout: 3000
+
+# Should show error alert
+- assertVisible: "Error|Please select an image"
+- tapOn: "OK"
+
+# Test with invalid path
+- scroll
+- assertVisible:
+    text: "Manual Path"
+    optional: true
+- tapOn:
+    text: ".*"
+    optional: true
+- scroll
+- inputText: "file:///invalid/path/image.jpg"
+- hideKeyboard
+
+- scroll
+- tapOn: "Convert.*balanced|Convert"
+- waitForAnimationToEnd:
+    timeout: 10000
+
+# Should show error
+- assertVisible: "Error|Conversion Failed|File not found"
+- tapOn: "OK"

@@ -32,9 +32,11 @@ yarn add @dynlabs/react-native-image-to-webp
 cd ios && pod install && cd ..
 ```
 
+The library automatically installs libwebp via CocoaPods.
+
 ### Android
 
-No additional setup required. The library uses CMake for native builds.
+No additional setup required. The library uses CMake FetchContent to automatically download and build libwebp during the build process.
 
 ## Quick Start
 

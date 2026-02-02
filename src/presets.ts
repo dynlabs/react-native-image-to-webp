@@ -54,6 +54,7 @@ export function applyPreset(options: ConvertOptions): ConvertOptions {
 
   const result: ConvertOptions = {
     ...options,
+    preset, // Ensure preset is always included in result
   };
 
   // Apply preset values only if not explicitly overridden

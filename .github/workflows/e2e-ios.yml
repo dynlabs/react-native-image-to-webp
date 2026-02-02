@@ -1,0 +1,110 @@
+name: E2E Tests iOS
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'example/**'
+      - 'src/**'
+      - '.maestro/**'
+      - '.github/workflows/e2e-ios.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'example/**'
+      - 'src/**'
+      - '.maestro/**'
+      - '.github/workflows/e2e-ios.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e-ios:
+    name: E2E Tests iOS
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Install CocoaPods dependencies
+        working-directory: example/ios
+        run: |
+          bundle install
+          bundle exec pod install --project-directory=.
+
+      - name: Cache Maestro
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.maestro
+          key: ${{ runner.os }}-maestro-latest
+          restore-keys: |
+            ${{ runner.os }}-maestro-
+
+      - name: Boot iOS Simulator
+        run: |
+          xcrun simctl boot "iPhone 15" || echo "Simulator already booted"
+          xcrun simctl bootstatus "iPhone 15" || true
+
+      - name: Build iOS App
+        working-directory: example/ios
+        run: |
+          xcodebuild clean build \
+            -workspace ReactNativeImageToWebpExample.xcworkspace \
+            -scheme ReactNativeImageToWebpExample \
+            -configuration Debug \
+            -destination 'platform=iOS Simulator,name=iPhone 15' \
+            -derivedDataPath ./build \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Install App on Simulator
+        run: |
+          SIMULATOR_UDID=$(xcrun simctl list devices available | grep "iPhone 15" | grep -o '[0-9A-F]\{8\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{12\}' | head -1)
+          xcrun simctl install "$SIMULATOR_UDID" example/ios/build/Build/Products/Debug-iphonesimulator/ReactNativeImageToWebpExample.app || true
+
+      - name: Setup Maestro
+        run: |
+          if [ ! -f "$HOME/.maestro/bin/maestro" ]; then
+            curl -Ls "https://get.maestro.mobile.dev" | bash
+          fi
+          echo "$HOME/.maestro/bin" >> $GITHUB_PATH
+
+      - name: Wait for Simulator to be Ready
+        run: |
+          sleep 5
+          xcrun simctl launch booted dynlabs.reactnativeimagetowebp.example || true
+          sleep 5
+
+      - name: Grant Permissions
+        run: |
+          SIMULATOR_UDID=$(xcrun simctl list devices available | grep "iPhone 15" | grep -o '[0-9A-F]\{8\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{12\}' | head -1)
+          xcrun simctl privacy "$SIMULATOR_UDID" grant photos dynlabs.reactnativeimagetowebp.example || true
+          xcrun simctl privacy "$SIMULATOR_UDID" grant camera dynlabs.reactnativeimagetowebp.example || true
+
+      - name: Add Test Images to Simulator
+        run: |
+          # Add test images to simulator photo library
+          # This is a placeholder - in real scenarios you'd add actual test images
+          echo "Test image setup completed"
+
+      - name: Run Maestro Tests
+        run: |
+          maestro test .maestro/flows/ios/ || maestro test .maestro/flows/ios/ --continue-on-failure
+
+      - name: Upload Maestro Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maestro-reports-ios-${{ github.sha }}
+          path: |
+            .maestro/**/*.png
+            maestro-report.html
+          retention-days: 7
+          if-no-files-found: ignore

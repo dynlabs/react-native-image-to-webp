@@ -16,16 +16,9 @@ Pod::Spec.new do |s|
   s.source_files = "ios/**/*.{h,m,mm,swift,cpp}", "cpp/**/*.{h,cpp}"
   s.private_header_files = "ios/**/*.h", "cpp/**/*.h"
 
-  # Include libwebp sources if vendored
-  libwebp_path = File.join(__dir__, "cpp/vendor/libwebp/src")
-  if Dir.exist?(libwebp_path)
-    s.source_files += "cpp/vendor/libwebp/src/**/*.{c,h}"
-    s.public_header_files = "cpp/vendor/libwebp/src/webp/*.h"
-    s.compiler_flags = "-O3 -DNDEBUG -DWEBP_AVAILABLE"
-  else
-    Pod::UI.warn "libwebp not found at #{libwebp_path}. Please vendor libwebp sources."
-    s.compiler_flags = "-O3 -DNDEBUG"
-  end
+  # Use CocoaPods dependency for libwebp
+  s.dependency "libwebp", "~> 1.6"
+  s.compiler_flags = "-O3 -DNDEBUG -DWEBP_AVAILABLE"
   s.pod_target_xcconfig = {
     "HEADER_SEARCH_PATHS" => "$(inherited) ${PODS_ROOT}/Headers/Private/React-Core",
     "OTHER_CPLUSPLUSFLAGS" => "$(OTHER_CFLAGS) -std=c++17"

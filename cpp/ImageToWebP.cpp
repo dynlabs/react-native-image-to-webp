@@ -3,7 +3,7 @@
 #include <vector>
 #include <cstring>
 
-// libwebp includes (uncomment after vendoring libwebp)
+// libwebp includes
 #ifdef WEBP_AVAILABLE
 #include "webp/encode.h"
 #include "webp/mux.h"
@@ -81,7 +81,7 @@ WebPEncodeResult encodeWebP(
   // Setup memory writer for output
   WebPMemoryWriter writer;
   WebPMemoryWriterInit(&writer);
-  picture.writer = WebPMemoryWriterWrite;
+  picture.writer = WebPMemoryWrite;
   picture.custom_ptr = &writer;
 
   // Encode
@@ -123,9 +123,9 @@ WebPEncodeResult encodeWebP(
   
   return result;
 #else
-  // Placeholder until libwebp is vendored
+  // libwebp not available
   result.success = false;
-  result.errorMessage = "libwebp not yet integrated. Please vendor libwebp sources to cpp/vendor/libwebp/ and define WEBP_AVAILABLE.";
+  result.errorMessage = "libwebp not available. Please ensure libwebp is properly configured.";
   
   return result;
 #endif

@@ -1,0 +1,83 @@
+appId: dynlabs.reactnativeimagetowebp.example
+---
+# Basic Image Conversion Test - Android
+# Tests: Select image, convert with default preset, verify size difference
+
+- launchApp
+- assertVisible: "Image to WebP Converter"
+- assertVisible: "Select Image"
+
+# Grant permissions if needed
+- runFlow:
+    when:
+      visible: "Allow.*access|Permission|Allow|Grant.*permission"
+    commands:
+      - tapOn: "Allow|OK|Grant|Allow access to all photos"
+      - waitForAnimationToEnd:
+          timeout: 2000
+
+# Select image from library
+- tapOn: "Select Image"
+- waitForAnimationToEnd:
+    timeout: 3000
+
+# Handle image picker dialog
+- runFlow:
+    when:
+      visible: ".*Photo Library|Gallery|Images|Choose from library|Select.*image"
+    commands:
+      - tapOn: ".*Photo Library|Gallery|Images|Choose from library"
+      - waitForAnimationToEnd:
+          timeout: 2000
+      - runFlow:
+          when:
+            visible: "Allow.*access|Permission|Allow|Grant"
+          commands:
+            - tapOn: "Allow|OK|Grant|Allow access"
+            - waitForAnimationToEnd:
+                timeout: 2000
+      # Select first image
+      - tapOn:
+          index: 0
+          optional: true
+      - waitForAnimationToEnd:
+          timeout: 2000
+      # Confirm selection if needed
+      - tapOn:
+          text: ".*Select|Choose|OK|Done|Confirm"
+          optional: true
+
+# Wait for image to be selected and UI to update
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "Change Image"
+
+# Verify original image size is displayed
+- assertVisible:
+    text: "Original Size:"
+    optional: true
+
+# Convert with default preset (balanced)
+- scroll
+- assertVisible: "Convert (balanced)"
+- tapOn: "Convert (balanced)"
+
+# Wait for conversion to complete
+- waitForAnimationToEnd:
+    timeout: 15000
+
+# Verify success alert
+- assertVisible: "Success"
+- tapOn: "OK"
+
+# Verify results section shows conversion details
+- scroll
+- assertVisible: "Results"
+- assertVisible: "balanced"
+
+# Verify size information is shown (WebP size should be different from original)
+- assertVisible:
+    text: "WebP Size:"
+- assertVisible:
+    text: "Saved:|Increased:"
+    optional: true

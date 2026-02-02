@@ -1,0 +1,19 @@
+appId: dynlabs.reactnativeimagetowebp.example
+---
+# Simple Test (No Launch) - Android
+# Tests: Basic UI elements when app is already running
+
+- assertVisible: "Image to WebP Converter"
+- assertVisible: "Select Image"
+
+# Verify presets are visible
+- scroll
+- assertVisible: "balanced"
+- assertVisible: "small"
+- assertVisible: "fast"
+- assertVisible: "lossless"
+- assertVisible: "document"
+
+# Verify options section
+- scroll
+- assertVisible: "Max Long Edge"

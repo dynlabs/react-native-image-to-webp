@@ -1,0 +1,55 @@
+appId: dynlabs.reactnativeimagetowebp.example
+---
+# Test Image Conversion - Verify Size Difference
+# Tests: Verify that converted WebP has different size than original
+
+- assertVisible: "Image to WebP Converter"
+
+# Scroll to manual path input
+- scroll
+- assertVisible:
+    text: "Manual Path"
+    optional: true
+
+# Enter image path
+- tapOn:
+    text: ".*"
+    optional: true
+- scroll
+- inputText: "/sdcard/Download/test-images/test-1080p.jpg"
+- hideKeyboard
+
+# Wait for image to load and show original size
+- waitForAnimationToEnd:
+    timeout: 3000
+- assertVisible:
+    text: "Original Size:"
+    optional: true
+
+# Convert with balanced preset
+- scroll
+- assertVisible: "Convert (balanced)"
+- tapOn: "Convert (balanced)"
+- waitForAnimationToEnd:
+    timeout: 15000
+
+# Verify success
+- assertVisible: "Success"
+- tapOn: "OK"
+
+# Verify results section
+- scroll
+- assertVisible: "Results"
+- assertVisible: "balanced"
+
+# Verify both original and WebP sizes are shown
+- assertVisible: "Original Size:"
+- assertVisible: "WebP Size:"
+
+# Verify size difference is shown (saved/increased)
+- assertVisible:
+    text: "Saved:|Increased:"
+
+# Verify dimensions are shown
+- assertVisible:
+    text: "Dimensions:.*×.*"

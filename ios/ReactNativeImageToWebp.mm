@@ -207,14 +207,15 @@ static uint8_t *createRGBABuffer(CGImageRef image, uint32_t *outWidth, uint32_t 
 }
 
 // Derive output path from input path if not provided
-static NSString *deriveOutputPath(NSString *inputPath, NSString *outputPath) {
+static NSString *deriveOutputPath(NSString *inputPath, NSString *outputPath, NSString *preset) {
   if (outputPath && outputPath.length > 0) {
     return outputPath;
   }
 
   NSString *directory = [inputPath stringByDeletingLastPathComponent];
   NSString *filename = [[inputPath lastPathComponent] stringByDeletingPathExtension];
-  return [directory stringByAppendingPathComponent:[filename stringByAppendingPathExtension:@"webp"]];
+  NSString *newFilename = [NSString stringWithFormat:@"%@.webp", filename];
+  return [directory stringByAppendingPathComponent:newFilename];
 }
 
 - (void)convertImageToWebP:(NSDictionary *)options
@@ -231,7 +232,8 @@ static NSString *deriveOutputPath(NSString *inputPath, NSString *outputPath) {
         return;
       }
 
-      NSString *outputPath = deriveOutputPath(inputPath, options[@"outputPath"]);
+      NSString *preset = options[@"preset"] ?: @"balanced";
+      NSString *outputPath = deriveOutputPath(inputPath, options[@"outputPath"], preset);
       NSNumber *maxLongEdge = options[@"maxLongEdge"];
       NSNumber *quality = options[@"quality"] ?: @80;
       NSNumber *method = options[@"method"] ?: @3;

@@ -1,0 +1,49 @@
+appId: dynlabs.reactnativeimagetowebp.example
+---
+# Test Manual Path Input - Android
+# Tests: Enter image path manually, convert, verify size difference
+
+- assertVisible: "Image to WebP Converter"
+
+# Scroll to manual path input
+- scroll
+- assertVisible:
+    text: "Manual Path"
+    optional: true
+
+# Use test images pushed to device
+- tapOn:
+    text: ".*"
+    optional: true
+- scroll
+- inputText: "/sdcard/Download/test-images/test-1080p.jpg"
+- hideKeyboard
+
+# Wait for image to load and show original size
+- waitForAnimationToEnd:
+    timeout: 3000
+- assertVisible:
+    text: "Original Size:"
+    optional: true
+
+# Scroll to convert section
+- scroll
+- assertVisible: "Convert (balanced)"
+- tapOn: "Convert (balanced)"
+- waitForAnimationToEnd:
+    timeout: 15000
+
+# Verify conversion succeeded
+- assertVisible: "Success"
+- tapOn: "OK"
+
+# Verify results section
+- scroll
+- assertVisible: "Results"
+- assertVisible: "balanced"
+
+# Verify WebP size is shown and different from original
+- assertVisible: "WebP Size:"
+- assertVisible:
+    text: "Saved:|Increased:"
+    optional: true

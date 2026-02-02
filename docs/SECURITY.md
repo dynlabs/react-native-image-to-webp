@@ -49,7 +49,7 @@ We will respond within 48 hours and work with you to address the issue.
 
 ### Dependencies
 
-- **libwebp**: Vendored from official source (webmproject/libwebp). Keep updated to latest stable version (>= 1.6.0).
+- **libwebp**: Dependency managed via CocoaPods (iOS) and CMake FetchContent (Android). Uses version >= 1.6.0 from official source (webmproject/libwebp).
 - **React Native**: Follow React Native's security advisories.
 
 ## Best Practices

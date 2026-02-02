@@ -84,3 +84,17 @@ android/generated
 
 # React Native Nitro Modules
 nitrogen/
+
+# Vendored dependencies (libwebp)
+cpp/vendor/
+
+# Maestro
+maestro.zip
+maestro-report.html
+.maestro/**/*.png
+.maestro/**/*.mp4
+
+# Test images (generated, can be regenerated)
+test-images/*.jpg
+test-images/*.png
+!test-images/README.md

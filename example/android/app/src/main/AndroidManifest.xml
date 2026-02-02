@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <!-- Note: CAMERA permission is handled internally by react-native-image-picker -->
+    <!-- Do not declare it here unless you need it for other packages and handle it manually -->
 
     <application
       android:name=".MainApplication"
