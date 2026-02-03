@@ -24,7 +24,7 @@ concurrency:
 jobs:
   e2e-android:
     name: E2E Tests Android
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     timeout-minutes: 30
 
     steps:
@@ -81,12 +81,10 @@ jobs:
           echo "🔍 DEBUG: System Information"
           echo "=========================================="
           echo "OS: $(uname -a)"
-          echo "CPU: $(lscpu | grep 'Model name' || echo 'Unknown')"
-          echo "Memory: $(free -h | grep Mem || echo 'Unknown')"
+          echo "CPU: $(sysctl -n machdep.cpu.brand_string || echo 'Unknown')"
+          echo "Memory: $(sysctl -n hw.memsize | awk '{print $1/1024/1024/1024 " GB"}')"
           echo "Available disk space:"
           df -h
-          echo "KVM availability:"
-          ls -la /dev/kvm || echo "KVM not available"
           echo "Current user: $(whoami)"
           echo "Groups: $(groups)"
           echo "Android SDK location: $ANDROID_HOME"
