@@ -123,6 +123,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot-load -noaudio -no-boot-anim -skip-adb-auth -wipe-data -no-metrics
           disable-animations: true
           disable-linux-hw-accel: false
+          working-directory: example/android
           script: |
             # Enable verbose logging
             export ANDROID_EMULATOR_VERBOSE=1
@@ -153,7 +154,6 @@ jobs:
             echo "✅ Emulator ready, starting build and test process..."
             
             # Build Release APK with optimized Gradle settings
-            cd example/android
             ./gradlew assembleRelease \
               --no-daemon \
               --console=plain \
@@ -182,14 +182,13 @@ jobs:
             adb push ../../test-images/test-4k.jpg /sdcard/Download/test-images/test-4k.jpg || exit 1
             adb shell ls -lh /sdcard/Download/test-images/
             
-            # Run Maestro tests
+            # Run Maestro tests (from repo root)
             echo "🧪 Running Maestro tests..."
-            cd ../..
-            maestro test .maestro/flows/android/ || maestro test .maestro/flows/android/ --continue-on-failure || exit 1
+            cd ../.. && maestro test .maestro/flows/android/ || maestro test .maestro/flows/android/ --continue-on-failure || exit 1
             
-            # Pull test artifacts
+            # Pull test artifacts (from repo root)
             echo "📦 Collecting test artifacts..."
-            mkdir -p artifacts/test-images
+            cd ../.. && mkdir -p artifacts/test-images
             adb pull /sdcard/Download/test-images/test-1080p.jpg artifacts/test-images/ || echo "⚠️ Failed to pull test-1080p.jpg"
             adb pull /sdcard/Download/test-images/test-2k.jpg artifacts/test-images/ || echo "⚠️ Failed to pull test-2k.jpg"
             adb pull /sdcard/Download/test-images/test-4k.jpg artifacts/test-images/ || echo "⚠️ Failed to pull test-4k.jpg"
