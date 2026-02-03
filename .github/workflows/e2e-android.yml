@@ -86,6 +86,7 @@ jobs:
           emulator-boot-timeout: 180
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot-load -noaudio -no-boot-anim -skip-adb-auth -wipe-data
           disable-animations: true
+          disable-linux-hw-accel: true
           script: |
             # The android-emulator-runner action automatically starts the emulator
             # and waits for it to boot before running this script.
