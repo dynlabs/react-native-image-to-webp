@@ -79,9 +79,40 @@ jobs:
       - name: Generate Test Images
         run: python scripts/generate-test-images.py
 
-      # Make gradlew executable before emulator starts
+      # Make gradlew executable before building
       - name: Prepare Gradle Wrapper
         run: chmod +x example/android/gradlew
+
+      # Get package version for cache key
+      - name: Get Package Version
+        id: package-version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Package version: $VERSION"
+
+      # Build Release APK before emulator starts (can run in parallel)
+      - name: Build Release APK
+        working-directory: example/android
+        run: |
+          ./gradlew assembleRelease \
+            --no-daemon \
+            --console=plain \
+            --build-cache \
+            --parallel \
+            --max-workers=4 \
+            -PreactNativeArchitectures=x86_64 || exit 1
+          echo "✅ Release APK built successfully"
+
+      # Cache the built APK using package version as key
+      - name: Cache Release APK
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: example/android/app/build/outputs/apk/release/app-release.apk
+          key: android-release-apk-${{ steps.package-version.outputs.version }}-${{ hashFiles('example/android/app/build.gradle', 'example/android/build.gradle', 'package.json') }}
+          restore-keys: |
+            android-release-apk-${{ steps.package-version.outputs.version }}-
+            android-release-apk-
 
       # Debug: Check system info before emulator starts
       - name: Debug System Information
@@ -151,18 +182,21 @@ jobs:
             adb shell getprop ro.build.version.release || echo "⚠️ Could not get Android version"
             adb shell getprop ro.product.model || echo "⚠️ Could not get device model"
             
-            echo "✅ Emulator ready, starting build and test process..."
+            echo "✅ Emulator ready, starting test process..."
             
-            # Build Release APK with optimized Gradle settings
-            ./gradlew assembleRelease \
-              --no-daemon \
-              --console=plain \
-              --build-cache \
-              --parallel \
-              --max-workers=4 \
-              -PreactNativeArchitectures=x86_64 || exit 1
-            
-            echo "✅ Release APK built successfully"
+            # Verify APK exists (should be cached or built in previous step)
+            if [ ! -f "app/build/outputs/apk/release/app-release.apk" ]; then
+              echo "❌ APK not found! Building now..."
+              ./gradlew assembleRelease \
+                --no-daemon \
+                --console=plain \
+                --build-cache \
+                --parallel \
+                --max-workers=4 \
+                -PreactNativeArchitectures=x86_64 || exit 1
+            else
+              echo "✅ Using cached APK"
+            fi
             
             # Install APK and grant permissions
             adb wait-for-device
