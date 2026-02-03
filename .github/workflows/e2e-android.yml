@@ -145,33 +145,10 @@ jobs:
             echo "📱 ADB devices:"
             adb devices -l
             
-            # Check emulator boot status
-            echo "🔍 Checking emulator boot status..."
-            i=1
-            while [ $i -le 30 ]; do
-              BOOT_COMPLETED=$(adb shell getprop sys.boot_completed 2>/dev/null || echo "")
-              BOOT_ANIM=$(adb shell getprop init.svc.bootanim 2>/dev/null || echo "")
-              echo "  Attempt $i/30: boot_completed=$BOOT_COMPLETED, bootanim=$BOOT_ANIM"
-              if [ "$BOOT_COMPLETED" = "1" ] && [ "$BOOT_ANIM" = "stopped" ]; then
-                echo "✅ Emulator fully booted!"
-                break
-              fi
-              sleep 2
-              i=$((i + 1))
-            done
-            
-            # Final verification
-            echo "🔍 Final emulator verification..."
+            # Verify emulator is ready (android-emulator-runner already waits for boot)
+            echo "🔍 Verifying emulator is ready..."
             adb shell getprop ro.build.version.release || echo "⚠️ Could not get Android version"
             adb shell getprop ro.product.model || echo "⚠️ Could not get device model"
-            
-            # Capture logcat for debugging (last 50 lines)
-            echo "📋 Capturing recent logcat output..."
-            timeout 5 adb logcat -d -t 50 || echo "⚠️ Could not capture logcat"
-            
-            # Check emulator process
-            echo "🔍 Checking emulator process..."
-            ps aux | grep -i emulator | grep -v grep || echo "⚠️ No emulator process found"
             
             echo "✅ Emulator ready, starting build and test process..."
             
