@@ -91,8 +91,20 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Package version: $VERSION"
 
-      # Build Release APK before emulator starts (can run in parallel)
+      # Cache the Release APK using package version as key
+      - name: Cache Release APK
+        id: cache-apk
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: example/android/app/build/outputs/apk/release/app-release.apk
+          key: android-release-apk-${{ steps.package-version.outputs.version }}-${{ hashFiles('example/android/app/build.gradle', 'example/android/build.gradle', 'package.json') }}
+          restore-keys: |
+            android-release-apk-${{ steps.package-version.outputs.version }}-
+            android-release-apk-
+
+      # Build Release APK before emulator starts (only if cache miss)
       - name: Build Release APK
+        if: steps.cache-apk.outputs.cache-hit != 'true'
         working-directory: example/android
         run: |
           ./gradlew assembleRelease \
@@ -103,16 +115,6 @@ jobs:
             --max-workers=4 \
             -PreactNativeArchitectures=x86_64 || exit 1
           echo "✅ Release APK built successfully"
-
-      # Cache the built APK using package version as key
-      - name: Cache Release APK
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
-        with:
-          path: example/android/app/build/outputs/apk/release/app-release.apk
-          key: android-release-apk-${{ steps.package-version.outputs.version }}-${{ hashFiles('example/android/app/build.gradle', 'example/android/build.gradle', 'package.json') }}
-          restore-keys: |
-            android-release-apk-${{ steps.package-version.outputs.version }}-
-            android-release-apk-
 
       # Debug: Check system info before emulator starts
       - name: Debug System Information
@@ -186,7 +188,8 @@ jobs:
             
             # Verify APK exists (should be cached or built in previous step)
             if [ ! -f "app/build/outputs/apk/release/app-release.apk" ]; then
-              echo "❌ APK not found! Building now..."
+              echo "❌ APK not found! This should not happen - cache should have restored it."
+              echo "Building APK as fallback..."
               ./gradlew assembleRelease \
                 --no-daemon \
                 --console=plain \
@@ -195,7 +198,7 @@ jobs:
                 --max-workers=4 \
                 -PreactNativeArchitectures=x86_64 || exit 1
             else
-              echo "✅ Using cached APK"
+              echo "✅ APK found (cached or built in previous step)"
             fi
             
             # Install APK and grant permissions
