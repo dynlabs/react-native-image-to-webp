@@ -107,13 +107,13 @@ jobs:
           ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: 30
         with:
           api-level: 33
-          arch: x86_64
+          arch: arm64-v8a
           target: google_apis
           profile: Nexus 6
-          emulator-boot-timeout: 600
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot-load -noaudio -no-boot-anim -skip-adb-auth -wipe-data -verbose -show-kernel
+          emulator-boot-timeout: 300
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot-load -noaudio -no-boot-anim -skip-adb-auth -wipe-data -no-metrics
           disable-animations: true
-          disable-linux-hw-accel: auto
+          disable-linux-hw-accel: true
           script: |
             # Enable verbose logging
             export ANDROID_EMULATOR_VERBOSE=1
@@ -172,7 +172,7 @@ jobs:
               --build-cache \
               --parallel \
               --max-workers=4 \
-              -PreactNativeArchitectures=x86_64 || exit 1
+              -PreactNativeArchitectures=arm64-v8a || exit 1
             
             echo "✅ Release APK built successfully"
             
