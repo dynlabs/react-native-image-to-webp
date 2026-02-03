@@ -31,16 +31,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
-      - name: Setup
+      # Parallel setup steps that don't depend on each other
+      - name: Setup Node.js and Dependencies
         uses: ./.github/actions/setup
 
-      - name: Install CocoaPods dependencies
-        working-directory: example/ios
-        run: |
-          bundle install
-          # Update CocoaPods repo to ensure latest specs are available
-          bundle exec pod repo update || true
-          bundle exec pod install --project-directory=.
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Python Dependencies
+        run: pip install Pillow
 
       - name: Cache Maestro
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
@@ -50,85 +51,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maestro-
 
-      - name: List Available Simulators
-        run: |
-          xcrun simctl list devices available
-
-      - name: Create and Boot iOS Simulator
-        run: |
-          # List available device types
-          echo "Available device types:"
-          xcrun simctl list devicetypes | grep iPhone
-          
-          # Check if iPhone 15 simulator exists
-          if ! xcrun simctl list devices available | grep -q "iPhone 15"; then
-            echo "iPhone 15 simulator not found, creating it..."
-            # Get the latest iOS runtime
-            RUNTIME=$(xcrun simctl list runtimes available | grep "iOS" | tail -1 | sed 's/.*(\(.*\))/\1/' | xargs)
-            if [ -z "$RUNTIME" ]; then
-              echo "No iOS runtime found, listing runtimes:"
-              xcrun simctl list runtimes
-              RUNTIME=$(xcrun simctl list runtimes available | grep "iOS" | tail -1 | awk -F'[()]' '{print $2}' | xargs)
-            fi
-            
-            if [ -z "$RUNTIME" ]; then
-              echo "Warning: Could not determine runtime, trying without runtime specification"
-              xcrun simctl create "iPhone 15" "iPhone 15" || \
-              xcrun simctl create "iPhone 15" "iPhone 15 Pro" || \
-              xcrun simctl create "iPhone 15" "iPhone 14" || \
-              xcrun simctl create "iPhone 15" "iPhone 13"
-            else
-              echo "Creating iPhone 15 with runtime: $RUNTIME"
-              xcrun simctl create "iPhone 15" "iPhone 15" "$RUNTIME" || \
-              xcrun simctl create "iPhone 15" "iPhone 15 Pro" "$RUNTIME" || \
-              xcrun simctl create "iPhone 15" "iPhone 14" "$RUNTIME" || \
-              xcrun simctl create "iPhone 15" "iPhone 13" "$RUNTIME"
-            fi
-          fi
-          
-          # Boot the simulator
-          echo "Booting iPhone 15 simulator..."
-          xcrun simctl boot "iPhone 15" 2>&1 || echo "Simulator may already be booted"
-          
-          # Wait for simulator to be ready (check if it's in booted state)
-          echo "Waiting for simulator to be ready..."
-          for i in {1..30}; do
-            if xcrun simctl list devices booted | grep -q "iPhone 15"; then
-              echo "Simulator is booted"
-              break
-            fi
-            echo "Waiting... ($i/30)"
-            sleep 2
-          done
-          
-          sleep 5
-
-      - name: Build iOS App
-        working-directory: example/ios
-        run: |
-          xcodebuild clean build \
-            -workspace ReactNativeImageToWebpExample.xcworkspace \
-            -scheme ReactNativeImageToWebpExample \
-            -configuration Debug \
-            -destination 'platform=iOS Simulator,name=iPhone 15' \
-            -derivedDataPath ./build \
-            CODE_SIGNING_ALLOWED=NO
-
-      - name: Install App on Simulator
-        run: |
-          # Get simulator UDID (use booted if available, otherwise find by name)
-          SIMULATOR_UDID=$(xcrun simctl list devices booted | grep "iPhone 15" | grep -o '[0-9A-F]\{8\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{12\}' | head -1)
-          if [ -z "$SIMULATOR_UDID" ]; then
-            SIMULATOR_UDID=$(xcrun simctl list devices available | grep "iPhone 15" | grep -o '[0-9A-F]\{8\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{12\}' | head -1)
-          fi
-          if [ -z "$SIMULATOR_UDID" ]; then
-            echo "Error: Could not find iPhone 15 simulator UDID"
-            xcrun simctl list devices
-            exit 1
-          fi
-          echo "Installing app on simulator: $SIMULATOR_UDID"
-          xcrun simctl install "$SIMULATOR_UDID" example/ios/build/Build/Products/Debug-iphonesimulator/ReactNativeImageToWebpExample.app
-
       - name: Setup Maestro
         run: |
           if [ ! -f "$HOME/.maestro/bin/maestro" ]; then
@@ -136,70 +58,208 @@ jobs:
           fi
           echo "$HOME/.maestro/bin" >> $GITHUB_PATH
 
-      - name: Wait for Simulator to be Ready
+      # Generate test images before simulator starts (parallel with other setup)
+      - name: Generate Test Images
+        run: python scripts/generate-test-images.py
+
+      # Install CocoaPods dependencies
+      - name: Install CocoaPods dependencies
+        working-directory: example/ios
         run: |
-          # Ensure simulator is booted
-          if ! xcrun simctl list devices booted | grep -q "iPhone 15"; then
-            echo "Simulator not booted, booting now..."
-            xcrun simctl boot "iPhone 15"
-            sleep 5
+          bundle install
+          # Update CocoaPods repo to ensure latest specs are available
+          bundle exec pod repo update || true
+          bundle exec pod install --project-directory=.
+
+      # Get package version for cache key
+      - name: Get Package Version
+        id: package-version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Package version: $VERSION"
+
+      # Cache the iOS build using package version as key
+      - name: Cache iOS Build
+        id: cache-build
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: example/ios/build
+          key: ios-build-${{ steps.package-version.outputs.version }}-${{ hashFiles('example/ios/Podfile.lock', 'example/ios/ReactNativeImageToWebpExample.xcodeproj/project.pbxproj', 'package.json') }}
+          restore-keys: |
+            ios-build-${{ steps.package-version.outputs.version }}-
+            ios-build-
+
+      # Build iOS app before simulator starts (only if cache miss)
+      - name: Build iOS App
+        if: steps.cache-build.outputs.cache-hit != 'true'
+        working-directory: example/ios
+        run: |
+          # List available simulators to determine SDK
+          echo "Available simulators:"
+          xcrun simctl list devices available | head -20
+          
+          # Use a generic simulator destination for building (doesn't require specific simulator)
+          # This builds for iOS Simulator platform without needing a specific device
+          xcodebuild clean build \
+            -workspace ReactNativeImageToWebpExample.xcworkspace \
+            -scheme ReactNativeImageToWebpExample \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath ./build \
+            CODE_SIGNING_ALLOWED=NO || exit 1
+          
+          # Verify build output exists
+          if [ ! -d "build/Build/Products/Debug-iphonesimulator/ReactNativeImageToWebpExample.app" ]; then
+            echo "Error: Build output not found at expected location"
+            find build -name "*.app" -type d || true
+            exit 1
+          fi
+          echo "Build successful: build/Build/Products/Debug-iphonesimulator/ReactNativeImageToWebpExample.app"
+
+      # Start simulator and run all simulator-dependent steps in one block
+      - name: Create iOS Simulator and Run Tests
+        run: |
+          # List available runtimes and device types for debugging
+          echo "=== Available iOS Runtimes ==="
+          xcrun simctl list runtimes available
+          
+          echo ""
+          echo "=== Available Device Types ==="
+          xcrun simctl list devicetypes | grep iPhone
+          
+          # Get the latest available iOS runtime identifier
+          # Output format can be: iOS 18.2 (18.2 - 22C91) (com.apple.CoreSimulator.SimRuntime.iOS-18-2)
+          # or: iOS 26.2 - 23C54 - com.apple.CoreSimulator.SimRuntime.iOS-26-2
+          RUNTIME_LINE=$(xcrun simctl list runtimes available | grep "iOS" | tail -1)
+          echo "Latest runtime line: $RUNTIME_LINE"
+          
+          # Try multiple methods to extract runtime ID
+          # Method 1: Extract from parentheses (com.apple.CoreSimulator.SimRuntime.iOS-X-Y)
+          RUNTIME_ID=$(echo "$RUNTIME_LINE" | sed -n 's/.*(\(com\.apple\.CoreSimulator\.SimRuntime\.iOS-[0-9-]*\)).*/\1/p')
+          
+          # Method 2: Extract runtime ID directly if it's in the format "iOS X.Y - BUILD - com.apple..."
+          if [ -z "$RUNTIME_ID" ]; then
+            RUNTIME_ID=$(echo "$RUNTIME_LINE" | grep -o 'com\.apple\.CoreSimulator\.SimRuntime\.iOS-[0-9-]*' | head -1)
           fi
           
-          # Wait for simulator to be fully ready
+          # Method 3: Extract from any parentheses or after dashes
+          if [ -z "$RUNTIME_ID" ]; then
+            RUNTIME_ID=$(echo "$RUNTIME_LINE" | awk -F'[()]' '{for(i=1;i<=NF;i++) if($i ~ /com\.apple\.CoreSimulator\.SimRuntime\.iOS/) print $i}' | head -1)
+          fi
+          
+          # Method 4: Try extracting from space-separated format
+          if [ -z "$RUNTIME_ID" ]; then
+            RUNTIME_ID=$(echo "$RUNTIME_LINE" | awk '{for(i=1;i<=NF;i++) if($i ~ /^com\.apple\.CoreSimulator\.SimRuntime\.iOS/) print $i}' | head -1)
+          fi
+          
+          if [ -z "$RUNTIME_ID" ]; then
+            echo "Error: Could not determine iOS runtime from line: $RUNTIME_LINE"
+            echo "Full runtime list:"
+            xcrun simctl list runtimes available
+            exit 1
+          fi
+          
+          echo "Using iOS runtime: $RUNTIME_ID"
+          
+          # Determine device type (prefer iPhone 15, fallback to available devices)
+          DEVICE_TYPE="iPhone 15"
+          if ! xcrun simctl list devicetypes | grep -q "iPhone 15"; then
+            echo "iPhone 15 not found, trying iPhone 15 Pro..."
+            if xcrun simctl list devicetypes | grep -q "iPhone 15 Pro"; then
+              DEVICE_TYPE="iPhone 15 Pro"
+            elif xcrun simctl list devicetypes | grep -q "iPhone 14"; then
+              DEVICE_TYPE="iPhone 14"
+            elif xcrun simctl list devicetypes | grep -q "iPhone 13"; then
+              DEVICE_TYPE="iPhone 13"
+            else
+              echo "Error: Could not find suitable iPhone device type"
+              xcrun simctl list devicetypes | grep iPhone
+              exit 1
+            fi
+          fi
+          
+          echo "Using device type: $DEVICE_TYPE"
+          
+          # Check if simulator already exists
+          SIMULATOR_NAME="iPhone 15 E2E"
+          EXISTING_SIM=$(xcrun simctl list devices available | grep "$SIMULATOR_NAME" | grep -o '[0-9A-F]\{8\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{12\}' | head -1)
+          
+          if [ -n "$EXISTING_SIM" ]; then
+            echo "Found existing simulator: $EXISTING_SIM"
+            # Delete existing simulator to ensure clean state
+            xcrun simctl delete "$EXISTING_SIM" || true
+          fi
+          
+          # Create simulator with the determined runtime and device type
+          echo "Creating simulator: $SIMULATOR_NAME with device type: $DEVICE_TYPE, runtime: $RUNTIME_ID"
+          SIMULATOR_UDID=$(xcrun simctl create "$SIMULATOR_NAME" "$DEVICE_TYPE" "$RUNTIME_ID")
+          
+          if [ -z "$SIMULATOR_UDID" ]; then
+            echo "Error: Failed to create simulator"
+            exit 1
+          fi
+          
+          echo "Created simulator: $SIMULATOR_UDID"
+          
+          # Boot the simulator
+          echo "Booting simulator..."
+          xcrun simctl boot "$SIMULATOR_UDID" || echo "Simulator may already be booted"
+          
+          # Wait for simulator to be ready
           echo "Waiting for simulator to be ready..."
-          for i in {1..30}; do
-            if xcrun simctl list devices booted | grep -q "iPhone 15"; then
+          for i in {1..60}; do
+            if xcrun simctl list devices booted | grep -q "$SIMULATOR_UDID"; then
               echo "Simulator is booted"
               break
             fi
-            echo "Waiting... ($i/30)"
+            if [ $i -eq 60 ]; then
+              echo "Error: Simulator failed to boot within timeout"
+              xcrun simctl list devices
+              exit 1
+            fi
+            echo "Waiting... ($i/60)"
             sleep 2
           done
           
+          # Additional wait for simulator to be fully ready
           sleep 5
           
-          # Launch the app
-          echo "Launching app..."
-          xcrun simctl launch booted dynlabs.reactnativeimagetowebp.example || true
-          sleep 5
-
-      - name: Grant Permissions
-        run: |
-          # Get simulator UDID (prefer booted device)
-          SIMULATOR_UDID=$(xcrun simctl list devices booted | grep "iPhone 15" | grep -o '[0-9A-F]\{8\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{12\}' | head -1)
-          if [ -z "$SIMULATOR_UDID" ]; then
-            SIMULATOR_UDID=$(xcrun simctl list devices available | grep "iPhone 15" | grep -o '[0-9A-F]\{8\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{12\}' | head -1)
+          # Verify build exists (should be cached or built in previous step)
+          BUILD_PATH="example/ios/build/Build/Products/Debug-iphonesimulator/ReactNativeImageToWebpExample.app"
+          if [ ! -d "$BUILD_PATH" ]; then
+            echo "Build not found at $BUILD_PATH, building as fallback..."
+            cd example/ios
+            xcodebuild clean build \
+              -workspace ReactNativeImageToWebpExample.xcworkspace \
+              -scheme ReactNativeImageToWebpExample \
+              -configuration Debug \
+              -sdk iphonesimulator \
+              -destination "id=$SIMULATOR_UDID" \
+              -derivedDataPath ./build \
+              CODE_SIGNING_ALLOWED=NO || exit 1
+            cd ../..
+            
+            # Verify build was created
+            if [ ! -d "$BUILD_PATH" ]; then
+              echo "Error: Build still not found after fallback build"
+              find example/ios/build -name "*.app" -type d || true
+              exit 1
+            fi
           fi
-          if [ -z "$SIMULATOR_UDID" ]; then
-            echo "Warning: Could not find iPhone 15 simulator UDID, using booted device"
-            SIMULATOR_UDID="booted"
-          fi
-          echo "Granting permissions on simulator: $SIMULATOR_UDID"
+          
+          # Install app on simulator
+          echo "Installing app on simulator..."
+          xcrun simctl install "$SIMULATOR_UDID" "$BUILD_PATH" || exit 1
+          
+          # Grant permissions
+          echo "Granting permissions..."
           xcrun simctl privacy "$SIMULATOR_UDID" grant photos dynlabs.reactnativeimagetowebp.example || true
           xcrun simctl privacy "$SIMULATOR_UDID" grant camera dynlabs.reactnativeimagetowebp.example || true
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
-      - name: Install Python Dependencies
-        run: |
-          pip install Pillow
-
-      - name: Generate Test Images
-        run: |
-          python scripts/generate-test-images.py
-
-      - name: Add Test Images to Simulator
-        run: |
-          # Add test images to simulator photo library using simctl addmedia
-          SIMULATOR_UDID=$(xcrun simctl list devices booted | grep "iPhone 15" | grep -o '[0-9A-F]\{8\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{12\}' | head -1)
-          if [ -z "$SIMULATOR_UDID" ]; then
-            SIMULATOR_UDID="booted"
-          fi
           
-          # Add test images to Photos app
+          # Add test images to simulator photo library
+          echo "Adding test images to simulator..."
           if [ -f "test-images/test-1080p.jpg" ]; then
             xcrun simctl addmedia "$SIMULATOR_UDID" test-images/test-1080p.jpg || echo "Failed to add test-1080p.jpg"
           fi
@@ -210,11 +270,18 @@ jobs:
             xcrun simctl addmedia "$SIMULATOR_UDID" test-images/test-4k.jpg || echo "Failed to add test-4k.jpg"
           fi
           
-          echo "Test images added to simulator"
-
-      - name: Run Maestro Tests
-        run: |
-          maestro test .maestro/flows/ios/ || maestro test .maestro/flows/ios/ --continue-on-failure
+          # Launch the app
+          echo "Launching app..."
+          xcrun simctl launch "$SIMULATOR_UDID" dynlabs.reactnativeimagetowebp.example || true
+          sleep 5
+          
+          # Run Maestro tests
+          echo "Running Maestro tests..."
+          maestro test .maestro/flows/ios/ || maestro test .maestro/flows/ios/ --continue-on-failure || exit 1
+          
+          # Cleanup: shutdown simulator
+          echo "Shutting down simulator..."
+          xcrun simctl shutdown "$SIMULATOR_UDID" || true
 
       - name: Upload Maestro Reports
         if: always()
@@ -226,3 +293,4 @@ jobs:
             maestro-report.html
           retention-days: 7
           if-no-files-found: ignore
+          compression-level: 6

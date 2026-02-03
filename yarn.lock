@@ -1960,7 +1960,6 @@ __metadata:
     react-native-builder-bob: "npm:^0.40.17"
     react-native-fs: "npm:^2.20.0"
     react-native-image-picker: "npm:^7.1.2"
-    react-native-image-size: "npm:^1.1.6"
     react-native-monorepo-config: "npm:^0.3.1"
   languageName: unknown
   linkType: soft
@@ -8607,13 +8606,6 @@ __metadata:
     react: "*"
     react-native: "*"
   checksum: 10c0/0da1133e1ea2474577ebb91ba8af2f567d131489781ba2a73af0198f100c1ba5390cc9479e492abd7dd217c8bedc6f41794e961c7125aced9068ced07f2d96f5
-  languageName: node
-  linkType: hard
-
-"react-native-image-size@npm:^1.1.6":
-  version: 1.1.6
-  resolution: "react-native-image-size@npm:1.1.6"
-  checksum: 10c0/06b4e1a965e1c9801e74e4922fe0ea7149902f24f73cbc1560609335b01d982f278a2e8542850a8355db43b2169bd62033c3a3168c494814698546089dff4458
   languageName: node
   linkType: hard
 

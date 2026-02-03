@@ -25,7 +25,6 @@ import {
   ImageToWebPError,
 } from '@dynlabs/react-native-image-to-webp';
 import RNFS from 'react-native-fs';
-import ImageSize from 'react-native-image-size';
 
 const PRESETS: ConvertPreset[] = [
   'balanced',
@@ -85,22 +84,7 @@ export default function App(): React.JSX.Element {
         });
       }
       
-      // Get image dimensions for manual paths using react-native-image-size
-      // This gets actual image dimensions, not scaled display dimensions
-      ImageSize.getSize(displayUri)
-        .then((size) => {
-          // Verify dimensions are reasonable (not 0 or extremely small)
-          if (size.width > 0 && size.height > 0) {
-            setOriginalImageDimensions({ width: size.width, height: size.height });
-          } else {
-            console.log('Invalid image dimensions:', size.width, size.height);
-            setOriginalImageDimensions(null);
-          }
-        })
-        .catch((error) => {
-          console.log('Error getting image dimensions:', error);
-          setOriginalImageDimensions(null);
-        });
+      // Image dimensions will be set via Image's onLoad event
     } else if (!inputPath) {
       setOriginalImageUri(null);
       setOriginalFileSize(null);
@@ -186,18 +170,8 @@ export default function App(): React.JSX.Element {
       // Get image dimensions from image picker asset
       if (asset.width && asset.height) {
         setOriginalImageDimensions({ width: asset.width, height: asset.height });
-      } else {
-        // Fallback: get dimensions from image URI using react-native-image-size
-        // This gets actual image dimensions, not scaled display dimensions
-        ImageSize.getSize(displayUri)
-          .then((size) => {
-            setOriginalImageDimensions({ width: size.width, height: size.height });
-          })
-          .catch((error) => {
-            console.log('Error getting image dimensions:', error);
-            setOriginalImageDimensions(null);
-          });
       }
+      // If dimensions not available from picker, they will be set via Image's onLoad event
       
       setResults([]);
     }
@@ -368,6 +342,12 @@ export default function App(): React.JSX.Element {
                   source={{ uri: selectedImageUri || originalImageUri || '' }}
                   style={styles.selectedImage}
                   resizeMode="contain"
+                  onLoad={(event) => {
+                    const { width, height } = event.nativeEvent.source;
+                    if (width && height && width > 0 && height > 0) {
+                      setOriginalImageDimensions({ width, height });
+                    }
+                  }}
                   onError={(error) => {
                     console.log('Error loading original image:', error);
                   }}

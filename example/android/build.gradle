@@ -10,7 +10,7 @@ buildscript {
     repositories {
         google()
         mavenCentral()
-        // jcenter() is deprecated but needed for some older dependencies like react-native-image-size
+        // jcenter() is deprecated but kept for backward compatibility with older dependencies
         // Using mavenCentral() as fallback since jcenter is read-only
         maven {
             url "https://jcenter.bintray.com"
@@ -33,7 +33,7 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-        // jcenter() is deprecated but needed for some older dependencies like react-native-image-size
+        // jcenter() is deprecated but kept for backward compatibility with older dependencies
         // Add jcenter repository URL directly since jcenter() method is removed in Gradle 8+
         maven {
             url "https://jcenter.bintray.com"
