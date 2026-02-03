@@ -147,7 +147,8 @@ jobs:
             
             # Check emulator boot status
             echo "🔍 Checking emulator boot status..."
-            for i in {1..30}; do
+            i=1
+            while [ $i -le 30 ]; do
               BOOT_COMPLETED=$(adb shell getprop sys.boot_completed 2>/dev/null || echo "")
               BOOT_ANIM=$(adb shell getprop init.svc.bootanim 2>/dev/null || echo "")
               echo "  Attempt $i/30: boot_completed=$BOOT_COMPLETED, bootanim=$BOOT_ANIM"
@@ -156,6 +157,7 @@ jobs:
                 break
               fi
               sleep 2
+              i=$((i + 1))
             done
             
             # Final verification
