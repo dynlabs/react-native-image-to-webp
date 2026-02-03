@@ -24,12 +24,21 @@ concurrency:
 jobs:
   e2e-android:
     name: E2E Tests Android
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      # Enable KVM for hardware acceleration (required for x86_64 emulators on Linux)
+      # This must be done BEFORE the emulator runner action
+      - name: Enable KVM group perms
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
 
       # Parallel setup steps that don't depend on each other
       - name: Setup Node.js and Dependencies
@@ -81,10 +90,12 @@ jobs:
           echo "🔍 DEBUG: System Information"
           echo "=========================================="
           echo "OS: $(uname -a)"
-          echo "CPU: $(sysctl -n machdep.cpu.brand_string || echo 'Unknown')"
-          echo "Memory: $(sysctl -n hw.memsize | awk '{print $1/1024/1024/1024 " GB"}')"
+          echo "CPU: $(lscpu | grep 'Model name' || echo 'Unknown')"
+          echo "Memory: $(free -h | grep Mem || echo 'Unknown')"
           echo "Available disk space:"
           df -h
+          echo "KVM availability:"
+          ls -la /dev/kvm || echo "KVM not available"
           echo "Current user: $(whoami)"
           echo "Groups: $(groups)"
           echo "Android SDK location: $ANDROID_HOME"
@@ -105,13 +116,13 @@ jobs:
           ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: 30
         with:
           api-level: 33
-          arch: arm64-v8a
+          arch: x86_64
           target: google_apis
           profile: Nexus 6
           emulator-boot-timeout: 300
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot-load -noaudio -no-boot-anim -skip-adb-auth -wipe-data -no-metrics
           disable-animations: true
-          disable-linux-hw-accel: true
+          disable-linux-hw-accel: false
           script: |
             # Enable verbose logging
             export ANDROID_EMULATOR_VERBOSE=1
@@ -170,7 +181,7 @@ jobs:
               --build-cache \
               --parallel \
               --max-workers=4 \
-              -PreactNativeArchitectures=arm64-v8a || exit 1
+              -PreactNativeArchitectures=x86_64 || exit 1
             
             echo "✅ Release APK built successfully"
             
