@@ -10,6 +10,14 @@ buildscript {
     repositories {
         google()
         mavenCentral()
+        // jcenter() is deprecated but needed for some older dependencies like react-native-image-size
+        // Using mavenCentral() as fallback since jcenter is read-only
+        maven {
+            url "https://jcenter.bintray.com"
+            content {
+                includeGroupByRegex ".*"
+            }
+        }
     }
     dependencies {
         classpath("com.android.tools.build:gradle")
@@ -19,3 +27,19 @@ buildscript {
 }
 
 apply plugin: "com.facebook.react.rootproject"
+
+// Configure repositories for all projects to handle jcenter() deprecation in dependencies
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        // jcenter() is deprecated but needed for some older dependencies like react-native-image-size
+        // Add jcenter repository URL directly since jcenter() method is removed in Gradle 8+
+        maven {
+            url "https://jcenter.bintray.com"
+            content {
+                includeGroupByRegex ".*"
+            }
+        }
+    }
+}
