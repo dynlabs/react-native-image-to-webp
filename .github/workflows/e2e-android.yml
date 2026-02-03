@@ -49,29 +49,8 @@ jobs:
           python-version: '3.x'
           cache: 'pip'
 
-      - name: Cache Python Dependencies
-        id: cache-pip
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-pillow-${{ hashFiles('**/requirements*.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
       - name: Install Python Dependencies
-        if: steps.cache-pip.outputs.cache-hit != 'true'
-        run: pip install --cache-dir ~/.cache/pip Pillow
-
-      - name: Cache Gradle
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            example/android/.gradle
-          key: ${{ runner.os }}-gradle-${{ hashFiles('example/android/**/*.gradle*', 'example/android/gradle/wrapper/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
+        run: pip install Pillow
 
       - name: Cache Maestro
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
@@ -102,16 +81,23 @@ jobs:
         with:
           api-level: 33
           arch: arm64-v8a
+          target: google_apis
           profile: Nexus 6
           emulator-boot-timeout: 180
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot-load -noaudio -no-boot-anim -skip-adb-auth -wipe-data
           disable-animations: true
           script: |
-            echo "🚀 Emulator ready, starting build and test process..."
+            # The android-emulator-runner action automatically starts the emulator
+            # and waits for it to boot before running this script.
+            # Verify emulator is connected (safety check)
+            echo "🚀 Verifying emulator is ready..."
+            adb wait-for-device
+            adb devices
+            echo "✅ Emulator ready, starting build and test process..."
             
-            # Build APK with optimized Gradle settings
+            # Build Release APK with optimized Gradle settings
             cd example/android
-            ./gradlew assembleDebug \
+            ./gradlew assembleRelease \
               --no-daemon \
               --console=plain \
               --build-cache \
@@ -119,12 +105,12 @@ jobs:
               --max-workers=4 \
               -PreactNativeArchitectures=arm64-v8a || exit 1
             
-            echo "✅ APK built successfully"
+            echo "✅ Release APK built successfully"
             
             # Install APK and grant permissions
             adb wait-for-device
-            echo "📱 Installing APK..."
-            adb install -r app/build/outputs/apk/debug/app-debug.apk || exit 1
+            echo "📱 Installing Release APK..."
+            adb install -r app/build/outputs/apk/release/app-release.apk || exit 1
             
             echo "🔐 Granting permissions..."
             adb shell pm grant dynlabs.reactnativeimagetowebp.example android.permission.READ_EXTERNAL_STORAGE || true
