@@ -87,6 +87,8 @@ jobs:
           df -h
           echo "KVM availability:"
           ls -la /dev/kvm || echo "KVM not available"
+          echo "Current user: $(whoami)"
+          echo "Groups: $(groups)"
           echo "Android SDK location: $ANDROID_HOME"
           echo "Java version:"
           java -version
@@ -108,10 +110,10 @@ jobs:
           arch: x86_64
           target: google_apis
           profile: Nexus 6
-          emulator-boot-timeout: 180
+          emulator-boot-timeout: 600
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot-load -noaudio -no-boot-anim -skip-adb-auth -wipe-data -verbose -show-kernel
           disable-animations: true
-          disable-linux-hw-accel: false
+          disable-linux-hw-accel: auto
           script: |
             # Enable verbose logging
             export ANDROID_EMULATOR_VERBOSE=1
@@ -130,18 +132,8 @@ jobs:
             
             # The android-emulator-runner action automatically starts the emulator
             # and waits for it to boot before running this script.
-            echo "⏳ Waiting for emulator to be ready..."
-            adb wait-for-device || {
-              echo "❌ ERROR: adb wait-for-device failed"
-              echo "ADB devices:"
-              adb devices -l
-              echo "ADB server status:"
-              adb get-state || echo "ADB get-state failed"
-              exit 1
-            }
-            
-            echo "✅ ADB wait-for-device succeeded"
-            echo "📱 ADB devices after wait:"
+            # Verify emulator is accessible
+            echo "📱 ADB devices:"
             adb devices -l
             
             # Check emulator boot status
