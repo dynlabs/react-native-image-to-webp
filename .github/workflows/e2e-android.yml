@@ -102,6 +102,16 @@ jobs:
             android-release-apk-${{ steps.package-version.outputs.version }}-
             android-release-apk-
 
+      # Patch react-native-image-size build.gradle to fix jcenter() issue
+      - name: Patch react-native-image-size
+        run: |
+          if [ -f "example/node_modules/react-native-image-size/android/build.gradle" ]; then
+            sed -i 's/jcenter()/maven { url "https:\/\/jcenter.bintray.com" }/g' example/node_modules/react-native-image-size/android/build.gradle
+            echo "✅ Patched react-native-image-size build.gradle"
+          else
+            echo "⚠️ react-native-image-size not found, skipping patch"
+          fi
+
       # Build Release APK before emulator starts (only if cache miss)
       - name: Build Release APK
         if: steps.cache-apk.outputs.cache-hit != 'true'

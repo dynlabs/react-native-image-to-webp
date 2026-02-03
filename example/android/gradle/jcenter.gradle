@@ -1,0 +1,30 @@
+// Gradle init script to add jcenter() method for backward compatibility
+// This fixes dependencies like react-native-image-size that still use jcenter()
+
+allprojects {
+    repositories {
+        // Add jcenter repository URL as a workaround for removed jcenter() method
+        maven {
+            url "https://jcenter.bintray.com"
+            name = "jcenter"
+            content {
+                includeGroupByRegex ".*"
+            }
+        }
+    }
+}
+
+// Also add jcenter() method to RepositoryHandler for direct calls
+gradle.projectsEvaluated {
+    allprojects { project ->
+        project.repositories.metaClass.jcenter = {
+            return delegate.maven {
+                url "https://jcenter.bintray.com"
+                name = "jcenter"
+                content {
+                    includeGroupByRegex ".*"
+                }
+            }
+        }
+    }
+}
