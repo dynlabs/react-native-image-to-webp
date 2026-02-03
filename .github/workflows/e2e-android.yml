@@ -55,10 +55,6 @@ jobs:
           cache: 'gradle'
           cache-dependency-path: example/android/gradle/wrapper/gradle-wrapper.properties
 
-      - name: Finalize Android SDK
-        run: |
-          /bin/bash -c "yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null"
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
