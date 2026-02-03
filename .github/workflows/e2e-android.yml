@@ -44,9 +44,6 @@ jobs:
       - name: Setup Node.js and Dependencies
         uses: ./.github/actions/setup
 
-      - name: Build Library
-        run: yarn build
-
       - name: Setup JDK
         uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
         with:
