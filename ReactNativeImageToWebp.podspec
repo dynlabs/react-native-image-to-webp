@@ -17,7 +17,8 @@ Pod::Spec.new do |s|
   s.private_header_files = "ios/**/*.h", "cpp/**/*.h"
 
   # Use CocoaPods dependency for libwebp
-  s.dependency "libwebp", "~> 1.6"
+  # Note: libwebp pod is available up to version 1.5.0
+  s.dependency "libwebp", "~> 1.5"
   s.compiler_flags = "-O3 -DNDEBUG -DWEBP_AVAILABLE"
   s.pod_target_xcconfig = {
     "HEADER_SEARCH_PATHS" => "$(inherited) ${PODS_ROOT}/Headers/Private/React-Core",

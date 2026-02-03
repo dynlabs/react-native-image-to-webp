@@ -38,6 +38,8 @@ jobs:
         working-directory: example/ios
         run: |
           bundle install
+          # Update CocoaPods repo to ensure latest specs are available
+          bundle exec pod repo update || true
           bundle exec pod install --project-directory=.
 
       - name: Cache Maestro

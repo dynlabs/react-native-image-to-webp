@@ -6,7 +6,7 @@ This directory contains shared C++ code for WebP encoding using libwebp.
 
 libwebp is automatically managed:
 
-- **iOS**: Installed via CocoaPods dependency (`libwebp ~> 1.6`)
+- **iOS**: Installed via CocoaPods dependency (`libwebp ~> 1.5`)
 - **Android**: Downloaded automatically via CMake FetchContent during build
 
 No manual setup required.

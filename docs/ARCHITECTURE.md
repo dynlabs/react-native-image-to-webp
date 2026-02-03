@@ -125,7 +125,7 @@ Result Metadata Return
 
 **iOS**:
 
-- Uses CocoaPods dependency `libwebp ~> 1.6`
+- Uses CocoaPods dependency `libwebp ~> 1.5`
 - Automatically installed via `pod install`
 - Compiled as part of the module with release flags (`-O3 -DNDEBUG`)
 - Linked statically into the module
