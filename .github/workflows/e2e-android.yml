@@ -24,7 +24,7 @@ concurrency:
 jobs:
   e2e-android:
     name: E2E Tests Android
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
@@ -75,25 +75,102 @@ jobs:
       - name: Prepare Gradle Wrapper
         run: chmod +x example/android/gradlew
 
+      # Debug: Check system info before emulator starts
+      - name: Debug System Information
+        run: |
+          echo "=========================================="
+          echo "🔍 DEBUG: System Information"
+          echo "=========================================="
+          echo "OS: $(uname -a)"
+          echo "CPU: $(lscpu | grep 'Model name' || echo 'Unknown')"
+          echo "Memory: $(free -h | grep Mem || echo 'Unknown')"
+          echo "Available disk space:"
+          df -h
+          echo "KVM availability:"
+          ls -la /dev/kvm || echo "KVM not available"
+          echo "Android SDK location: $ANDROID_HOME"
+          echo "Java version:"
+          java -version
+          echo "ADB version:"
+          $ANDROID_HOME/platform-tools/adb version || echo "ADB not found"
+          echo "Emulator location:"
+          ls -la $ANDROID_HOME/emulator/emulator || echo "Emulator not found"
+          echo "=========================================="
+
       # Start emulator and run all emulator-dependent steps in one block
       - name: Create Android Emulator and Run Tests
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          ANDROID_EMULATOR_VERBOSE: 1
+          ANDROID_LOG_TAGS: "*:V"
+          ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: 30
         with:
           api-level: 33
-          arch: arm64-v8a
+          arch: x86_64
           target: google_apis
           profile: Nexus 6
           emulator-boot-timeout: 180
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot-load -noaudio -no-boot-anim -skip-adb-auth -wipe-data
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot-load -noaudio -no-boot-anim -skip-adb-auth -wipe-data -verbose -show-kernel
           disable-animations: true
-          disable-linux-hw-accel: true
+          disable-linux-hw-accel: false
           script: |
+            # Enable verbose logging
+            export ANDROID_EMULATOR_VERBOSE=1
+            export ANDROID_LOG_TAGS="*:V"
+            
+            echo "=========================================="
+            echo "🔍 DEBUG: Starting emulator verification"
+            echo "=========================================="
+            
+            # Check ADB status
+            echo "📱 Checking ADB status..."
+            adb version
+            adb start-server
+            echo "ADB devices before wait:"
+            adb devices -l
+            
             # The android-emulator-runner action automatically starts the emulator
             # and waits for it to boot before running this script.
-            # Verify emulator is connected (safety check)
-            echo "🚀 Verifying emulator is ready..."
-            adb wait-for-device
-            adb devices
+            echo "⏳ Waiting for emulator to be ready..."
+            adb wait-for-device || {
+              echo "❌ ERROR: adb wait-for-device failed"
+              echo "ADB devices:"
+              adb devices -l
+              echo "ADB server status:"
+              adb get-state || echo "ADB get-state failed"
+              exit 1
+            }
+            
+            echo "✅ ADB wait-for-device succeeded"
+            echo "📱 ADB devices after wait:"
+            adb devices -l
+            
+            # Check emulator boot status
+            echo "🔍 Checking emulator boot status..."
+            for i in {1..30}; do
+              BOOT_COMPLETED=$(adb shell getprop sys.boot_completed 2>/dev/null || echo "")
+              BOOT_ANIM=$(adb shell getprop init.svc.bootanim 2>/dev/null || echo "")
+              echo "  Attempt $i/30: boot_completed=$BOOT_COMPLETED, bootanim=$BOOT_ANIM"
+              if [ "$BOOT_COMPLETED" = "1" ] && [ "$BOOT_ANIM" = "stopped" ]; then
+                echo "✅ Emulator fully booted!"
+                break
+              fi
+              sleep 2
+            done
+            
+            # Final verification
+            echo "🔍 Final emulator verification..."
+            adb shell getprop ro.build.version.release || echo "⚠️ Could not get Android version"
+            adb shell getprop ro.product.model || echo "⚠️ Could not get device model"
+            
+            # Capture logcat for debugging (last 50 lines)
+            echo "📋 Capturing recent logcat output..."
+            timeout 5 adb logcat -d -t 50 || echo "⚠️ Could not capture logcat"
+            
+            # Check emulator process
+            echo "🔍 Checking emulator process..."
+            ps aux | grep -i emulator | grep -v grep || echo "⚠️ No emulator process found"
+            
             echo "✅ Emulator ready, starting build and test process..."
             
             # Build Release APK with optimized Gradle settings
@@ -104,7 +181,7 @@ jobs:
               --build-cache \
               --parallel \
               --max-workers=4 \
-              -PreactNativeArchitectures=arm64-v8a || exit 1
+              -PreactNativeArchitectures=x86_64 || exit 1
             
             echo "✅ Release APK built successfully"
             
