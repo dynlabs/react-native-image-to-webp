@@ -62,17 +62,6 @@ jobs:
         if: steps.cache-pip.outputs.cache-hit != 'true'
         run: pip install --cache-dir ~/.cache/pip Pillow
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          api-level: 33
-          target: default
-          arch: arm64-v8a
-
-      - name: Accept Android SDK Licenses
-        run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
-
       - name: Cache Gradle
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
