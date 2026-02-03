@@ -44,6 +44,9 @@ jobs:
       - name: Setup Node.js and Dependencies
         uses: ./.github/actions/setup
 
+      - name: Build Library
+        run: yarn build
+
       - name: Setup JDK
         uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
         with:
@@ -114,38 +117,11 @@ jobs:
             --parallel \
             --max-workers=4 \
             -PreactNativeArchitectures=x86_64 || exit 1
-          echo "✅ Release APK built successfully"
-
-      # Debug: Check system info before emulator starts
-      - name: Debug System Information
-        run: |
-          echo "=========================================="
-          echo "🔍 DEBUG: System Information"
-          echo "=========================================="
-          echo "OS: $(uname -a)"
-          echo "CPU: $(lscpu | grep 'Model name' || echo 'Unknown')"
-          echo "Memory: $(free -h | grep Mem || echo 'Unknown')"
-          echo "Available disk space:"
-          df -h
-          echo "KVM availability:"
-          ls -la /dev/kvm || echo "KVM not available"
-          echo "Current user: $(whoami)"
-          echo "Groups: $(groups)"
-          echo "Android SDK location: $ANDROID_HOME"
-          echo "Java version:"
-          java -version
-          echo "ADB version:"
-          $ANDROID_HOME/platform-tools/adb version || echo "ADB not found"
-          echo "Emulator location:"
-          ls -la $ANDROID_HOME/emulator/emulator || echo "Emulator not found"
-          echo "=========================================="
 
       # Start emulator and run all emulator-dependent steps in one block
       - name: Create Android Emulator and Run Tests
         uses: reactivecircus/android-emulator-runner@v2
         env:
-          ANDROID_EMULATOR_VERBOSE: 1
-          ANDROID_LOG_TAGS: "*:V"
           ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: 30
         with:
           api-level: 33
@@ -158,38 +134,9 @@ jobs:
           disable-linux-hw-accel: false
           working-directory: example/android
           script: |
-            # Enable verbose logging
-            export ANDROID_EMULATOR_VERBOSE=1
-            export ANDROID_LOG_TAGS="*:V"
-            
-            echo "=========================================="
-            echo "🔍 DEBUG: Starting emulator verification"
-            echo "=========================================="
-            
-            # Check ADB status
-            echo "📱 Checking ADB status..."
-            adb version
-            adb start-server
-            echo "ADB devices before wait:"
-            adb devices -l
-            
-            # The android-emulator-runner action automatically starts the emulator
-            # and waits for it to boot before running this script.
-            # Verify emulator is accessible
-            echo "📱 ADB devices:"
-            adb devices -l
-            
-            # Verify emulator is ready (android-emulator-runner already waits for boot)
-            echo "🔍 Verifying emulator is ready..."
-            adb shell getprop ro.build.version.release || echo "⚠️ Could not get Android version"
-            adb shell getprop ro.product.model || echo "⚠️ Could not get device model"
-            
-            echo "✅ Emulator ready, starting test process..."
-            
             # Verify APK exists (should be cached or built in previous step)
             if [ ! -f "app/build/outputs/apk/release/app-release.apk" ]; then
-              echo "❌ APK not found! This should not happen - cache should have restored it."
-              echo "Building APK as fallback..."
+              echo "APK not found, building as fallback..."
               ./gradlew assembleRelease \
                 --no-daemon \
                 --console=plain \
@@ -197,43 +144,32 @@ jobs:
                 --parallel \
                 --max-workers=4 \
                 -PreactNativeArchitectures=x86_64 || exit 1
-            else
-              echo "✅ APK found (cached or built in previous step)"
             fi
             
             # Install APK and grant permissions
             adb wait-for-device
-            echo "📱 Installing Release APK..."
             adb install -r app/build/outputs/apk/release/app-release.apk || exit 1
-            
-            echo "🔐 Granting permissions..."
             adb shell pm grant dynlabs.reactnativeimagetowebp.example android.permission.READ_EXTERNAL_STORAGE || true
             adb shell pm grant dynlabs.reactnativeimagetowebp.example android.permission.READ_MEDIA_IMAGES || true
             adb shell pm grant dynlabs.reactnativeimagetowebp.example android.permission.CAMERA || true
             
             # Push test images
-            echo "📸 Pushing test images..."
             adb shell mkdir -p /sdcard/Download/test-images
             adb push ../../test-images/test-1080p.jpg /sdcard/Download/test-images/test-1080p.jpg || exit 1
             adb push ../../test-images/test-2k.jpg /sdcard/Download/test-images/test-2k.jpg || exit 1
             adb push ../../test-images/test-4k.jpg /sdcard/Download/test-images/test-4k.jpg || exit 1
-            adb shell ls -lh /sdcard/Download/test-images/
             
             # Run Maestro tests (from repo root)
-            echo "🧪 Running Maestro tests..."
             cd ../.. && maestro test .maestro/flows/android/ || maestro test .maestro/flows/android/ --continue-on-failure || exit 1
             
             # Pull test artifacts (from repo root)
-            echo "📦 Collecting test artifacts..."
             cd ../.. && mkdir -p artifacts/test-images
-            adb pull /sdcard/Download/test-images/test-1080p.jpg artifacts/test-images/ || echo "⚠️ Failed to pull test-1080p.jpg"
-            adb pull /sdcard/Download/test-images/test-2k.jpg artifacts/test-images/ || echo "⚠️ Failed to pull test-2k.jpg"
-            adb pull /sdcard/Download/test-images/test-4k.jpg artifacts/test-images/ || echo "⚠️ Failed to pull test-4k.jpg"
-            adb pull /sdcard/Download/test-images/test-1080p.webp artifacts/test-images/ || echo "⚠️ Failed to pull test-1080p.webp (may not exist)"
-            adb pull /sdcard/Download/test-images/test-2k.webp artifacts/test-images/ || echo "⚠️ Failed to pull test-2k.webp (may not exist)"
-            adb pull /sdcard/Download/test-images/test-4k.webp artifacts/test-images/ || echo "⚠️ Failed to pull test-4k.webp (may not exist)"
-            
-            echo "✅ All tests completed!"
+            adb pull /sdcard/Download/test-images/test-1080p.jpg artifacts/test-images/ || true
+            adb pull /sdcard/Download/test-images/test-2k.jpg artifacts/test-images/ || true
+            adb pull /sdcard/Download/test-images/test-4k.jpg artifacts/test-images/ || true
+            adb pull /sdcard/Download/test-images/test-1080p.webp artifacts/test-images/ || true
+            adb pull /sdcard/Download/test-images/test-2k.webp artifacts/test-images/ || true
+            adb pull /sdcard/Download/test-images/test-4k.webp artifacts/test-images/ || true
 
       - name: Upload Test Images Artifacts
         if: always()
