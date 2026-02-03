@@ -2,9 +2,19 @@ name: E2E Tests Android
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
+    paths:
+      - 'example/**'
+      - 'src/**'
+      - '.maestro/**'
+      - '.github/workflows/e2e-android.yml'
   pull_request:
-    branches: [main]
+    branches: [main, develop]
+    paths:
+      - 'example/**'
+      - 'src/**'
+      - '.maestro/**'
+      - '.github/workflows/e2e-android.yml'
   workflow_dispatch:
 
 concurrency:
@@ -21,14 +31,36 @@ jobs:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
-      - name: Setup
+      # Parallel setup steps that don't depend on each other
+      - name: Setup Node.js and Dependencies
         uses: ./.github/actions/setup
 
-      - name: Install JDK
+      - name: Setup JDK
         uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
         with:
           distribution: 'zulu'
           java-version: '17'
+          cache: 'gradle'
+          cache-dependency-path: example/android/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          cache: 'pip'
+
+      - name: Cache Python Dependencies
+        id: cache-pip
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-pillow-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Python Dependencies
+        if: steps.cache-pip.outputs.cache-hit != 'true'
+        run: pip install --cache-dir ~/.cache/pip Pillow
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -37,17 +69,18 @@ jobs:
           target: default
           arch: arm64-v8a
 
-      - name: Finalize Android SDK
+      - name: Accept Android SDK Licenses
         run: |
-          /bin/bash -c "yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null"
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
 
       - name: Cache Gradle
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: |
-            ~/.gradle/wrapper
             ~/.gradle/caches
-          key: ${{ runner.os }}-gradle-${{ hashFiles('example/android/gradle/wrapper/gradle-wrapper.properties') }}
+            ~/.gradle/wrapper
+            example/android/.gradle
+          key: ${{ runner.os }}-gradle-${{ hashFiles('example/android/**/*.gradle*', 'example/android/gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
 
@@ -59,75 +92,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maestro-
 
-      - name: Create Android Emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 33
-          arch: arm64-v8a
-          profile: Nexus 6
-          script: |
-            echo "Emulator created and started"
-
-      - name: Restart ADB and Wait for Emulator
-        run: |
-          echo "Restarting ADB server..."
-          adb kill-server || true
-          sleep 2
-          adb start-server
-          sleep 2
-          
-          echo "Waiting for emulator to be ready..."
-          # Wait for emulator to appear in ADB devices list
-          for i in {1..60}; do
-            if adb devices | grep -q "emulator.*device"; then
-              echo "Emulator found in ADB devices"
-              break
-            fi
-            echo "Waiting for emulator... ($i/60)"
-            sleep 2
-          done
-          
-          # Verify emulator is connected
-          echo "ADB devices:"
-          adb devices
-          
-          # Wait for boot to complete
-          echo "Waiting for emulator to boot completely..."
-          adb wait-for-device
-          adb shell "while [[ -z $(getprop sys.boot_completed | tr -d '\r') ]]; do sleep 1; done"
-          
-          # Wait for emulator to be idle (important for Android 31+)
-          echo "Waiting for emulator to be idle..."
-          for i in {1..30}; do
-            # Check if system is responsive by checking boot animation status
-            BOOT_ANIM=$(adb shell "getprop init.svc.bootanim" 2>/dev/null || echo "running")
-            if [ "$BOOT_ANIM" = "stopped" ]; then
-              echo "Boot animation stopped, emulator should be ready"
-              break
-            fi
-            echo "Waiting for emulator to be idle... (bootanim: $BOOT_ANIM, $i/30)"
-            sleep 2
-          done
-          
-          sleep 5
-          echo "Emulator is ready!"
-
-      - name: Make gradlew executable
-        run: chmod +x example/android/gradlew
-
-      - name: Build Android Debug APK
-        working-directory: example/android
-        run: |
-          ./gradlew assembleDebug --no-daemon --console=plain
-
-      - name: Install APK on Emulator
-        run: |
-          adb wait-for-device
-          adb install -r example/android/app/build/outputs/apk/debug/app-debug.apk || true
-          adb shell pm grant dynlabs.reactnativeimagetowebp.example android.permission.READ_EXTERNAL_STORAGE || true
-          adb shell pm grant dynlabs.reactnativeimagetowebp.example android.permission.READ_MEDIA_IMAGES || true
-          adb shell pm grant dynlabs.reactnativeimagetowebp.example android.permission.CAMERA || true
-
       - name: Setup Maestro
         run: |
           if [ ! -f "$HOME/.maestro/bin/maestro" ]; then
@@ -135,52 +99,73 @@ jobs:
           fi
           echo "$HOME/.maestro/bin" >> $GITHUB_PATH
 
-      - name: Verify Emulator Connection
-        run: |
-          echo "Verifying emulator connection..."
-          adb devices
-          adb shell getprop sys.boot_completed || echo "Warning: Boot not completed yet"
-          echo "Emulator connection verified"
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
-      - name: Install Python Dependencies
-        run: |
-          pip install Pillow
-
+      # Generate test images before emulator starts (parallel with other setup)
       - name: Generate Test Images
-        run: |
-          python scripts/generate-test-images.py
+        run: python scripts/generate-test-images.py
 
-      - name: Push Test Images to Emulator
-        run: |
-          adb wait-for-device
-          adb shell mkdir -p /sdcard/Download/test-images
-          adb push test-images/test-1080p.jpg /sdcard/Download/test-images/test-1080p.jpg || true
-          adb push test-images/test-2k.jpg /sdcard/Download/test-images/test-2k.jpg || true
-          adb push test-images/test-4k.jpg /sdcard/Download/test-images/test-4k.jpg || true
-          adb shell ls -lh /sdcard/Download/test-images/
+      # Make gradlew executable before emulator starts
+      - name: Prepare Gradle Wrapper
+        run: chmod +x example/android/gradlew
 
-      - name: Run Maestro Tests
-        run: |
-          maestro test .maestro/flows/android/ || maestro test .maestro/flows/android/ --continue-on-failure
-
-      - name: Pull All Test Images
-        if: always()
-        run: |
-          mkdir -p artifacts/test-images
-          # Pull input images
-          adb pull /sdcard/Download/test-images/test-1080p.jpg artifacts/test-images/ || echo "Failed to pull test-1080p.jpg"
-          adb pull /sdcard/Download/test-images/test-2k.jpg artifacts/test-images/ || echo "Failed to pull test-2k.jpg"
-          adb pull /sdcard/Download/test-images/test-4k.jpg artifacts/test-images/ || echo "Failed to pull test-4k.jpg"
-          # Pull output WebP images
-          adb pull /sdcard/Download/test-images/test-1080p.webp artifacts/test-images/ || echo "Failed to pull test-1080p.webp (may not exist if test didn't run)"
-          adb pull /sdcard/Download/test-images/test-2k.webp artifacts/test-images/ || echo "Failed to pull test-2k.webp (may not exist if test didn't run)"
-          adb pull /sdcard/Download/test-images/test-4k.webp artifacts/test-images/ || echo "Failed to pull test-4k.webp (may not exist if test didn't run)"
-          ls -lh artifacts/test-images/ || echo "No artifacts directory"
+      # Start emulator and run all emulator-dependent steps in one block
+      - name: Create Android Emulator and Run Tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          arch: arm64-v8a
+          profile: Nexus 6
+          emulator-boot-timeout: 180
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot-load -noaudio -no-boot-anim -skip-adb-auth -wipe-data
+          disable-animations: true
+          script: |
+            echo "🚀 Emulator ready, starting build and test process..."
+            
+            # Build APK with optimized Gradle settings
+            cd example/android
+            ./gradlew assembleDebug \
+              --no-daemon \
+              --console=plain \
+              --build-cache \
+              --parallel \
+              --max-workers=4 \
+              -PreactNativeArchitectures=arm64-v8a || exit 1
+            
+            echo "✅ APK built successfully"
+            
+            # Install APK and grant permissions
+            adb wait-for-device
+            echo "📱 Installing APK..."
+            adb install -r app/build/outputs/apk/debug/app-debug.apk || exit 1
+            
+            echo "🔐 Granting permissions..."
+            adb shell pm grant dynlabs.reactnativeimagetowebp.example android.permission.READ_EXTERNAL_STORAGE || true
+            adb shell pm grant dynlabs.reactnativeimagetowebp.example android.permission.READ_MEDIA_IMAGES || true
+            adb shell pm grant dynlabs.reactnativeimagetowebp.example android.permission.CAMERA || true
+            
+            # Push test images
+            echo "📸 Pushing test images..."
+            adb shell mkdir -p /sdcard/Download/test-images
+            adb push ../../test-images/test-1080p.jpg /sdcard/Download/test-images/test-1080p.jpg || exit 1
+            adb push ../../test-images/test-2k.jpg /sdcard/Download/test-images/test-2k.jpg || exit 1
+            adb push ../../test-images/test-4k.jpg /sdcard/Download/test-images/test-4k.jpg || exit 1
+            adb shell ls -lh /sdcard/Download/test-images/
+            
+            # Run Maestro tests
+            echo "🧪 Running Maestro tests..."
+            cd ../..
+            maestro test .maestro/flows/android/ || maestro test .maestro/flows/android/ --continue-on-failure || exit 1
+            
+            # Pull test artifacts
+            echo "📦 Collecting test artifacts..."
+            mkdir -p artifacts/test-images
+            adb pull /sdcard/Download/test-images/test-1080p.jpg artifacts/test-images/ || echo "⚠️ Failed to pull test-1080p.jpg"
+            adb pull /sdcard/Download/test-images/test-2k.jpg artifacts/test-images/ || echo "⚠️ Failed to pull test-2k.jpg"
+            adb pull /sdcard/Download/test-images/test-4k.jpg artifacts/test-images/ || echo "⚠️ Failed to pull test-4k.jpg"
+            adb pull /sdcard/Download/test-images/test-1080p.webp artifacts/test-images/ || echo "⚠️ Failed to pull test-1080p.webp (may not exist)"
+            adb pull /sdcard/Download/test-images/test-2k.webp artifacts/test-images/ || echo "⚠️ Failed to pull test-2k.webp (may not exist)"
+            adb pull /sdcard/Download/test-images/test-4k.webp artifacts/test-images/ || echo "⚠️ Failed to pull test-4k.webp (may not exist)"
+            
+            echo "✅ All tests completed!"
 
       - name: Upload Test Images Artifacts
         if: always()
@@ -190,6 +175,7 @@ jobs:
           path: artifacts/test-images/*
           retention-days: 30
           if-no-files-found: warn
+          compression-level: 6
 
       - name: Upload Maestro Reports
         if: always()
@@ -201,3 +187,4 @@ jobs:
             maestro-report.html
           retention-days: 7
           if-no-files-found: ignore
+          compression-level: 6
