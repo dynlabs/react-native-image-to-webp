@@ -58,7 +58,7 @@ export async function convertImageToWebP(
 
   // Apply preset defaults
   const finalOptions = applyPreset(options);
-  
+
   // Ensure preset is included in options for native module to use in filename
   if (!finalOptions.preset && options.preset) {
     finalOptions.preset = options.preset;

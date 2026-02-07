@@ -45,14 +45,15 @@ interface ConversionResult {
 
 export default function App(): React.JSX.Element {
   const [inputPath, setInputPath] = useState<string>(
-    Platform.OS === 'android'
-      ? '/sdcard/Download/test-images/test-2k.jpg'
-      : ''
+    Platform.OS === 'android' ? '/sdcard/Download/test-images/test-2k.jpg' : ''
   );
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
   const [originalImageUri, setOriginalImageUri] = useState<string | null>(null);
   const [originalFileSize, setOriginalFileSize] = useState<number | null>(null);
-  const [originalImageDimensions, setOriginalImageDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [originalImageDimensions, setOriginalImageDimensions] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
   const [maxLongEdge, setMaxLongEdge] = useState<string>('2048');
   const [selectedPreset, setSelectedPreset] =
     useState<ConvertPreset>('balanced');
@@ -60,7 +61,10 @@ export default function App(): React.JSX.Element {
   const [results, setResults] = useState<ConversionResult[]>([]);
   const [zoomImageUri, setZoomImageUri] = useState<string | null>(null);
   const [isZoomModalVisible, setIsZoomModalVisible] = useState<boolean>(false);
-  const [zoomImageSize, setZoomImageSize] = useState<{ width: number; height: number } | null>(null);
+  const [zoomImageSize, setZoomImageSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
 
   // Set default original image URI when inputPath changes
   useEffect(() => {
@@ -71,10 +75,10 @@ export default function App(): React.JSX.Element {
             ? inputPath
             : `file://${inputPath}`
           : inputPath.startsWith('file://')
-            ? inputPath
-            : `file://${inputPath}`;
+          ? inputPath
+          : `file://${inputPath}`;
       setOriginalImageUri(displayUri);
-      
+
       // Try to get file size for manual paths
       if (originalFileSize === null) {
         getFileSize(inputPath).then((size) => {
@@ -83,7 +87,7 @@ export default function App(): React.JSX.Element {
           }
         });
       }
-      
+
       // Image dimensions will be set via Image's onLoad event
     } else if (!inputPath) {
       setOriginalImageUri(null);
@@ -97,7 +101,7 @@ export default function App(): React.JSX.Element {
     try {
       // Remove file:// prefix if present, react-native-fs handles paths directly
       const normalizedPath = path.replace('file://', '');
-      
+
       // Use react-native-fs to get file stats
       const stats = await RNFS.stat(normalizedPath);
       return stats.size;
@@ -115,24 +119,27 @@ export default function App(): React.JSX.Element {
     if (response.errorCode) {
       let errorMessage = 'Unknown error';
       let errorTitle = 'Error';
-      
+
       // Handle specific error codes
       switch (response.errorCode) {
         case 'permission':
           errorTitle = 'Permission Denied';
-          errorMessage = 'Camera or storage permission was denied. Please grant permission in app settings.';
+          errorMessage =
+            'Camera or storage permission was denied. Please grant permission in app settings.';
           break;
         case 'camera_unavailable':
           errorTitle = 'Camera Unavailable';
           errorMessage = 'Camera is not available on this device.';
           break;
         case 'others':
-          errorMessage = response.errorMessage || 'An error occurred while selecting the image.';
+          errorMessage =
+            response.errorMessage ||
+            'An error occurred while selecting the image.';
           break;
         default:
           errorMessage = response.errorMessage || 'Unknown error occurred.';
       }
-      
+
       Alert.alert(errorTitle, errorMessage);
       return;
     }
@@ -142,19 +149,23 @@ export default function App(): React.JSX.Element {
       // Use fileUri if available (Android), otherwise use uri (iOS)
       // For Android, fileUri provides the actual file path needed for native modules
       // For iOS, uri is already in the correct format (file://)
-      const fileUri = ('fileUri' in asset && typeof asset.fileUri === 'string') ? asset.fileUri : null;
+      const fileUri =
+        'fileUri' in asset && typeof asset.fileUri === 'string'
+          ? asset.fileUri
+          : null;
       const path: string = fileUri || asset.uri;
-      
+
       // Remove file:// prefix for Android if present
-      const normalizedPath = Platform.OS === 'android' && path.startsWith('file://')
-        ? path.replace('file://', '')
-        : path;
-      
+      const normalizedPath =
+        Platform.OS === 'android' && path.startsWith('file://')
+          ? path.replace('file://', '')
+          : path;
+
       setInputPath(normalizedPath);
       const displayUri = asset.uri;
       setSelectedImageUri(displayUri); // Use uri for display (works with Image component)
       setOriginalImageUri(displayUri); // Store original for comparison
-      
+
       // Get original file size if available from image picker
       if (asset.fileSize) {
         setOriginalFileSize(asset.fileSize);
@@ -166,13 +177,16 @@ export default function App(): React.JSX.Element {
           }
         });
       }
-      
+
       // Get image dimensions from image picker asset
       if (asset.width && asset.height) {
-        setOriginalImageDimensions({ width: asset.width, height: asset.height });
+        setOriginalImageDimensions({
+          width: asset.width,
+          height: asset.height,
+        });
       }
       // If dimensions not available from picker, they will be set via Image's onLoad event
-      
+
       setResults([]);
     }
   };
@@ -240,9 +254,10 @@ export default function App(): React.JSX.Element {
           setOriginalFileSize(size);
         } else {
           // Try again with normalized path
-          const normalizedPath = Platform.OS === 'android' && inputPath.startsWith('file://')
-            ? inputPath.replace('file://', '')
-            : inputPath;
+          const normalizedPath =
+            Platform.OS === 'android' && inputPath.startsWith('file://')
+              ? inputPath.replace('file://', '')
+              : inputPath;
           const retrySize = await getFileSize(normalizedPath);
           if (retrySize !== null && retrySize > 0) {
             setOriginalFileSize(retrySize);
@@ -270,17 +285,23 @@ export default function App(): React.JSX.Element {
         originalFileSize !== null
           ? calculateSizeReduction(originalFileSize, result.sizeBytes)
           : null;
-      
-      let message = `Converted to WebP!\nWebP Size: ${(result.sizeBytes / 1024).toFixed(2)} KB`;
+
+      let message = `Converted to WebP!\nWebP Size: ${(
+        result.sizeBytes / 1024
+      ).toFixed(2)} KB`;
       if (originalFileSize !== null) {
-        message += `\nOriginal Size: ${(originalFileSize / 1024).toFixed(2)} KB`;
+        message += `\nOriginal Size: ${(originalFileSize / 1024).toFixed(
+          2
+        )} KB`;
       }
       if (sizeReduction !== null) {
         const reductionText = sizeReduction > 0 ? 'Reduced' : 'Increased';
-        message += `\nSize ${reductionText}: ${Math.abs(sizeReduction).toFixed(1)}%`;
+        message += `\nSize ${reductionText}: ${Math.abs(sizeReduction).toFixed(
+          1
+        )}%`;
       }
       message += `\nDuration: ${duration}ms`;
-      
+
       Alert.alert('Success', message);
     } catch (error) {
       let errorMessage = 'Unknown error';
@@ -294,7 +315,6 @@ export default function App(): React.JSX.Element {
       setIsConverting(false);
     }
   };
-
 
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
@@ -317,7 +337,7 @@ export default function App(): React.JSX.Element {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>1. Select Image</Text>
-          
+
           <TouchableOpacity
             style={[styles.button, styles.selectButton]}
             onPress={showImagePickerOptions}
@@ -353,11 +373,13 @@ export default function App(): React.JSX.Element {
                   }}
                 />
               </TouchableOpacity>
-              {(originalFileSize !== null || originalImageDimensions !== null) && (
+              {(originalFileSize !== null ||
+                originalImageDimensions !== null) && (
                 <View style={styles.imageInfoContainer}>
                   {originalImageDimensions !== null && (
                     <Text style={styles.fileSizeText}>
-                      Resolution: {originalImageDimensions.width} × {originalImageDimensions.height}
+                      Resolution: {originalImageDimensions.width} ×{' '}
+                      {originalImageDimensions.height}
                     </Text>
                   )}
                   {originalFileSize !== null && (
@@ -394,10 +416,10 @@ export default function App(): React.JSX.Element {
                       ? text
                       : `file://${text}`
                     : text.startsWith('file://')
-                      ? text
-                      : `file://${text}`;
+                    ? text
+                    : `file://${text}`;
                 setOriginalImageUri(displayUri);
-                
+
                 // Reset file size and dimensions - will be fetched by useEffect
                 setOriginalFileSize(null);
                 setOriginalImageDimensions(null);
@@ -417,8 +439,8 @@ export default function App(): React.JSX.Element {
             editable={!isConverting}
           />
           <Text style={styles.hintText}>
-            You can also manually enter a file path. On iOS, use file:// URIs. On
-            Android, use absolute paths.
+            You can also manually enter a file path. On iOS, use file:// URIs.
+            On Android, use absolute paths.
           </Text>
         </View>
 
@@ -475,9 +497,7 @@ export default function App(): React.JSX.Element {
               <Text style={styles.buttonText}>Convert ({selectedPreset})</Text>
             )}
           </TouchableOpacity>
-
         </View>
-
 
         {results.length > 0 && (
           <View style={styles.section}>
@@ -489,9 +509,11 @@ export default function App(): React.JSX.Element {
                   ? calculateSizeReduction(originalFileSize, result.sizeBytes)
                   : null;
               // Ensure WebP path has proper file:// prefix for display
-              const resultImageUri = Platform.OS === 'android' && !result.outputPath.startsWith('file://')
-                ? `file://${result.outputPath}`
-                : result.outputPath;
+              const resultImageUri =
+                Platform.OS === 'android' &&
+                !result.outputPath.startsWith('file://')
+                  ? `file://${result.outputPath}`
+                  : result.outputPath;
               return (
                 <View key={index} style={styles.resultCard}>
                   <Text style={styles.resultPreset}>{result.preset}</Text>
@@ -529,7 +551,18 @@ export default function App(): React.JSX.Element {
                           : styles.sizeReductionNegative,
                       ]}
                     >
-                      {sizeReduction !== null && sizeReduction > 0 ? 'Saved' : 'Increased'}: {sizeReduction !== null ? Math.abs(sizeReduction).toFixed(1) : '0.0'}% ({formatFileSize(Math.abs(originalFileSize - result.sizeBytes))})
+                      {sizeReduction !== null && sizeReduction > 0
+                        ? 'Saved'
+                        : 'Increased'}
+                      :{' '}
+                      {sizeReduction !== null
+                        ? Math.abs(sizeReduction).toFixed(1)
+                        : '0.0'}
+                      % (
+                      {formatFileSize(
+                        Math.abs(originalFileSize - result.sizeBytes)
+                      )}
+                      )
                     </Text>
                   )}
                   <Text style={styles.resultText}>
@@ -573,8 +606,14 @@ export default function App(): React.JSX.Element {
                   contentContainerStyle={[
                     styles.zoomScrollContent,
                     zoomImageSize && {
-                      minWidth: Math.max(Dimensions.get('window').width, zoomImageSize.width),
-                      minHeight: Math.max(Dimensions.get('window').height, zoomImageSize.height),
+                      minWidth: Math.max(
+                        Dimensions.get('window').width,
+                        zoomImageSize.width
+                      ),
+                      minHeight: Math.max(
+                        Dimensions.get('window').height,
+                        zoomImageSize.height
+                      ),
                     },
                   ]}
                   showsHorizontalScrollIndicator={true}
@@ -603,21 +642,27 @@ export default function App(): React.JSX.Element {
                         const screenWidth = Dimensions.get('window').width;
                         const screenHeight = Dimensions.get('window').height;
                         const aspectRatio = width / height;
-                        
+
                         let displayWidth = screenWidth;
                         let displayHeight = screenWidth / aspectRatio;
-                        
+
                         if (displayHeight > screenHeight) {
                           displayHeight = screenHeight;
                           displayWidth = screenHeight * aspectRatio;
                         }
-                        
-                        setZoomImageSize({ width: displayWidth, height: displayHeight });
+
+                        setZoomImageSize({
+                          width: displayWidth,
+                          height: displayHeight,
+                        });
                       }
                     }}
                     onError={(error) => {
                       console.log('Error loading zoom image:', error);
-                      Alert.alert('Error', 'Failed to load image. The file may not exist or may be corrupted.');
+                      Alert.alert(
+                        'Error',
+                        'Failed to load image. The file may not exist or may be corrupted.'
+                      );
                     }}
                   />
                 </ScrollView>
