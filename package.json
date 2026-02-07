@@ -52,7 +52,13 @@
     "test:e2e:studio": "powershell -ExecutionPolicy Bypass -File scripts/run-tests-visual.ps1 -Studio",
     "test:e2e:convert": "powershell -ExecutionPolicy Bypass -File scripts/run-tests-visual.ps1 -Flow \".maestro/flows/android/07-convert-1080p.yaml\"",
     "test:e2e:convert:all": "powershell -ExecutionPolicy Bypass -File scripts/run-tests-visual.ps1 -Flow \".maestro/flows/android/10-convert-all-resolutions.yaml\"",
-    "build": "bob build"
+    "build": "bob build",
+    "quality": "yarn lint && yarn typecheck && yarn format:check && yarn build",
+    "e2e": "yarn test:e2e:android",
+    "e2e:android": "maestro test .maestro/flows/android/",
+    "e2e:ios": "maestro test .maestro/flows/ios/",
+    "bumpversion": "node scripts/bumpversion.js",
+    "deploy": "yarn build && npm publish --access public"
   },
   "keywords": [
     "react-native",
