@@ -44,9 +44,7 @@ interface ConversionResult {
 }
 
 export default function App(): React.JSX.Element {
-  const [inputPath, setInputPath] = useState<string>(
-    Platform.OS === 'android' ? '/sdcard/Download/test-images/test-2k.jpg' : ''
-  );
+  const [inputPath, setInputPath] = useState<string>('');
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
   const [originalImageUri, setOriginalImageUri] = useState<string | null>(null);
   const [originalFileSize, setOriginalFileSize] = useState<number | null>(null);
@@ -431,7 +429,7 @@ export default function App(): React.JSX.Element {
             }}
             placeholder={
               Platform.OS === 'android'
-                ? '/sdcard/Download/test-images/test-2k.jpg'
+                ? '/sdcard/Download/image.jpg'
                 : 'file:///path/to/image.jpg'
             }
             autoCapitalize="none"

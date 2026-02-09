@@ -127,7 +127,16 @@ maestro cloud .maestro/flows/ios/
 - Ensure Android emulator or physical device is running
 - App must be installed: `dynlabs.reactnativeimagetowebp.example`
 - Grant photo library and camera permissions when prompted
-- For manual path tests, ensure test images exist at specified paths
+- **Manual path tests (04, 07–12)** require images on the device. Push your own images:
+
+  ```bash
+  adb shell mkdir -p /sdcard/Download/test-images
+  adb push your-1080p.jpg /sdcard/Download/test-images/test-1080p.jpg
+  adb push your-2k.jpg    /sdcard/Download/test-images/test-2k.jpg
+  adb push your-4k.jpg    /sdcard/Download/test-images/test-4k.jpg
+  ```
+
+  Use any free images (e.g. from [Pexels](https://pexels.com) or [Unsplash](https://unsplash.com)) at these resolutions: 1920×1080, 2560×1440, 3840×2160.
 
 ### iOS
 
