@@ -1,0 +1,45 @@
+buildscript {
+    ext {
+        buildToolsVersion = "36.0.0"
+        minSdkVersion = 24
+        compileSdkVersion = 36
+        targetSdkVersion = 36
+        ndkVersion = "27.1.12297006"
+        kotlinVersion = "2.1.20"
+    }
+    repositories {
+        google()
+        mavenCentral()
+        // jcenter() is deprecated but kept for backward compatibility with older dependencies
+        // Using mavenCentral() as fallback since jcenter is read-only
+        maven {
+            url "https://jcenter.bintray.com"
+            content {
+                includeGroupByRegex ".*"
+            }
+        }
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle")
+        classpath("com.facebook.react:react-native-gradle-plugin")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
+    }
+}
+
+apply plugin: "com.facebook.react.rootproject"
+
+// Configure repositories for all projects to handle jcenter() deprecation in dependencies
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        // jcenter() is deprecated but kept for backward compatibility with older dependencies
+        // Add jcenter repository URL directly since jcenter() method is removed in Gradle 8+
+        maven {
+            url "https://jcenter.bintray.com"
+            content {
+                includeGroupByRegex ".*"
+            }
+        }
+    }
+}

@@ -1,0 +1,22 @@
+# Generated files
+lib/
+node_modules/
+.yarn/
+
+# Build outputs
+*.log
+dist/
+build/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# React Native
+example/ios/Pods/
+example/android/build/
+example/android/app/build/
