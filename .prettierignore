@@ -20,3 +20,5 @@ Thumbs.db
 example/ios/Pods/
 example/android/build/
 example/android/app/build/
+**/.cxx/
+**/.cmake/

@@ -25,6 +25,7 @@ Contributions are welcome! This project uses a monorepo setup with Yarn workspac
 ## ✅ Quality Checks
 
 Before submitting a PR, please run:
+
 - `yarn lint` - Fix linting/formatting.
 - `yarn typecheck` - Verify TypeScript.
 - `yarn build` - Ensure the library builds correctly.
