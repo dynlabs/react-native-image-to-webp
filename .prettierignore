@@ -1,5 +1,8 @@
 # Generated files
 lib/
+
+# Docusaurus website (has its own tooling)
+website/
 node_modules/
 .yarn/
 
