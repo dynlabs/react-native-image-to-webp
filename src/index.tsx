@@ -7,6 +7,8 @@ import { validateOptions } from './validation';
 import { applyPreset } from './presets';
 
 export type { ConvertOptions, ConvertResult, ConvertPreset };
+export { useImageConverter } from './useImageConverter';
+export type { UseImageConverterResult } from './useImageConverter';
 
 const ERROR_CODES = {
   INVALID_INPUT: 'INVALID_INPUT',
@@ -56,8 +58,17 @@ export async function convertImageToWebP(
     throw new ImageToWebPError(validationError.code, validationError.message);
   }
 
+  // Strip file:// prefix here since native layers expect raw paths
+  let normalizedInputPath = options.inputPath;
+  if (normalizedInputPath.startsWith('file://')) {
+    normalizedInputPath = normalizedInputPath.replace(/^file:\/\//, '');
+  }
+
   // Apply preset defaults
-  const finalOptions = applyPreset(options);
+  const finalOptions = applyPreset({
+    ...options,
+    inputPath: normalizedInputPath,
+  });
 
   // Ensure preset is included in options for native module to use in filename
   if (!finalOptions.preset && options.preset) {

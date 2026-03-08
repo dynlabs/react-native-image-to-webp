@@ -1,9 +1,0 @@
-appId:
-  ios: dynlabs.reactnativeimagetowebp.example
-  android: dynlabs.reactnativeimagetowebp.example
-
-tags:
-  - e2e
-  - react-native
-  - image-conversion
-  - webp

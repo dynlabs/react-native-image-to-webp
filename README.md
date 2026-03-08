@@ -1,24 +1,22 @@
 # @dynlabs/react-native-image-to-webp
 
-A production-ready React Native library for converting images to WebP format with presets, resizing, and high-performance native implementations.
+**Performant. Type-safe. Zero-effort WebP conversion for React Native.**
 
-## Features
+Convert any image to WebP format in milliseconds using React Native's **New Architecture (TurboModules)**. Optimized for speed and quality with native implementations and `libwebp`.
 
-- 🚀 **TurboModule** (New Architecture only) for optimal performance
-- 🎨 **5 Presets**: balanced, small, fast, lossless, document
-- 📐 **Smart Resizing**: Preserve aspect ratio with `maxLongEdge`
-- 🔒 **Privacy-First**: Strips EXIF metadata by default
-- ⚡ **High Performance**: Native decoders + libwebp encoding, all off main thread
-- 📱 **iOS & Android**: Platform-optimized implementations
-- 🛡️ **Type-Safe**: Full TypeScript support with strict types
+---
 
-## Requirements
+## ⚡ Features
 
-- React Native >= 0.68
-- **New Architecture (TurboModules) enabled**
-- iOS 11.0+ / Android API 24+
+- 🚀 **TurboModule** for maximal performance (New Architecture).
+- 🎨 **Smart Presets**: Choose between balance, small, fast, and lossless.
+- 📐 **Smart Resizing**: Auto-preserve aspect ratio with `maxLongEdge`.
+- 🔒 **Privacy-First**: Automatically strips EXIF metadata.
+- 📱 **Native Performance**: Runs entirely off-thread (background worker).
 
-## Installation
+---
+t
+## 📦 Installation
 
 ```bash
 npm install @dynlabs/react-native-image-to-webp
@@ -26,224 +24,79 @@ npm install @dynlabs/react-native-image-to-webp
 yarn add @dynlabs/react-native-image-to-webp
 ```
 
-### iOS
-
+### iOS Setup
 ```bash
 cd ios && pod install && cd ..
 ```
+*Note: Android works out of the box.*
 
-The library automatically installs libwebp via CocoaPods.
+---
 
-### Android
+## 🚀 Quick Start (5 seconds)
 
-No additional setup required. The library uses CMake FetchContent to automatically download and build libwebp during the build process.
+The easiest way to use the library is with the built-in React hook:
 
-## Quick Start
+```tsx
+import { useImageConverter } from '@dynlabs/react-native-image-to-webp';
 
-```typescript
+function App() {
+  const { convert, isConverting, result } = useImageConverter();
+
+  const handlePress = async () => {
+    const res = await convert({
+      inputPath: '/path/to/image.jpg',
+      preset: 'balanced',
+      maxLongEdge: 2048,
+    });
+    console.log('Saved to:', res.outputPath);
+  };
+
+  return (
+    <Button 
+      title={isConverting ? "Converting..." : "Convert to WebP"} 
+      onPress={handlePress} 
+    />
+  );
+}
+```
+
+### Manual Usage
+```tsx
 import { convertImageToWebP } from '@dynlabs/react-native-image-to-webp';
 
 const result = await convertImageToWebP({
   inputPath: '/path/to/image.jpg',
-  preset: 'balanced',
-  maxLongEdge: 2048,
-});
-
-console.log(`Output: ${result.outputPath}`);
-console.log(`Size: ${result.sizeBytes} bytes`);
-console.log(`Dimensions: ${result.width}×${result.height}`);
-```
-
-## API
-
-### `convertImageToWebP(options: ConvertOptions): Promise<ConvertResult>`
-
-#### Options
-
-| Parameter       | Type            | Required | Default        | Description                               |
-| --------------- | --------------- | -------- | -------------- | ----------------------------------------- |
-| `inputPath`     | `string`        | ✅       | -              | Path to input image file                  |
-| `outputPath`    | `string`        | ❌       | Auto-derived   | Output WebP file path                     |
-| `preset`        | `ConvertPreset` | ❌       | `'balanced'`   | Preset configuration                      |
-| `maxLongEdge`   | `number`        | ❌       | -              | Max dimension (preserves aspect ratio)    |
-| `quality`       | `number`        | ❌       | Preset default | Quality 0-100 (overrides preset)          |
-| `method`        | `number`        | ❌       | Preset default | Compression method 0-6 (overrides preset) |
-| `lossless`      | `boolean`       | ❌       | Preset default | Use lossless encoding (overrides preset)  |
-| `stripMetadata` | `boolean`       | ❌       | `true`         | Strip EXIF metadata                       |
-
-#### Result
-
-```typescript
-{
-  outputPath: string; // Path to created WebP file
-  width: number; // Image width in pixels
-  height: number; // Image height in pixels
-  sizeBytes: number; // Output file size in bytes
-}
-```
-
-## Presets
-
-| Preset     | Quality | Method | Use Case                                                |
-| ---------- | ------- | ------ | ------------------------------------------------------- |
-| `balanced` | 80      | 3      | **Default**. General-purpose, good quality/size balance |
-| `small`    | 74      | 5      | Optimized for smaller file sizes                        |
-| `fast`     | 78      | 1      | Faster encoding, slightly larger files                  |
-| `lossless` | -       | 4      | Perfect quality, larger files                           |
-| `document` | 82      | 4      | Documents, images with text/transparency                |
-
-### Examples
-
-```typescript
-// Balanced (default)
-await convertImageToWebP({
-  inputPath: '/path/to/image.jpg',
-  preset: 'balanced',
-});
-
-// Small file size
-await convertImageToWebP({
-  inputPath: '/path/to/image.jpg',
-  preset: 'small',
-  maxLongEdge: 1024,
-});
-
-// Lossless
-await convertImageToWebP({
-  inputPath: '/path/to/image.jpg',
-  preset: 'lossless',
-});
-
-// Custom quality
-await convertImageToWebP({
-  inputPath: '/path/to/image.jpg',
-  quality: 90,
-  method: 4,
-  maxLongEdge: 2048,
+  preset: 'small', // 'balanced' | 'small' | 'fast' | 'lossless'
 });
 ```
-
-## Resizing
-
-Use `maxLongEdge` to resize images while preserving aspect ratio:
-
-```typescript
-// Resize so longest edge is max 2048px
-await convertImageToWebP({
-  inputPath: '/path/to/large-image.jpg',
-  maxLongEdge: 2048, // If image is 4000×3000, becomes 2048×1536
-});
-```
-
-**Recommendation**: Always use `maxLongEdge` for better performance and smaller files. Common values:
-
-- **Thumbnails**: 512
-- **Mobile display**: 1024
-- **Retina display**: 2048 (recommended default)
-- **High-res**: 3072
-
-## Error Handling
-
-```typescript
-import {
-  convertImageToWebP,
-  ImageToWebPError,
-  ERROR_CODES,
-} from '@dynlabs/react-native-image-to-webp';
-
-try {
-  const result = await convertImageToWebP({ inputPath: '/path/to/image.jpg' });
-} catch (error) {
-  if (error instanceof ImageToWebPError) {
-    switch (error.code) {
-      case ERROR_CODES.FILE_NOT_FOUND:
-        console.error('File not found');
-        break;
-      case ERROR_CODES.DECODE_FAILED:
-        console.error('Failed to decode image');
-        break;
-      case ERROR_CODES.ENCODE_FAILED:
-        console.error('Failed to encode WebP');
-        break;
-      // ... other error codes
-    }
-  }
-}
-```
-
-### Error Codes
-
-- `INVALID_INPUT`: Invalid parameters
-- `FILE_NOT_FOUND`: Input file doesn't exist
-- `DECODE_FAILED`: Failed to decode input image
-- `ENCODE_FAILED`: Failed to encode WebP
-- `IO_ERROR`: File I/O error
-- `UNSUPPORTED_FORMAT`: Unsupported image format
-
-## Supported Formats
-
-### iOS
-
-- JPEG, PNG, HEIC/HEIF, TIFF, GIF (first frame), WebP
-
-### Android
-
-- JPEG, PNG, WebP, HEIF (API 28+), GIF (first frame)
-
-## Performance
-
-- All processing runs **off the main thread** (background queue/executor)
-- Uses platform-native decoders (ImageIO on iOS, ImageDecoder/BitmapFactory on Android)
-- Resize before encoding for best performance
-- Typical encoding time: 0.5-2s for 2000×1500 images (varies by device/preset)
-
-See [PERFORMANCE.md](docs/PERFORMANCE.md) for detailed performance guidance.
-
-## Architecture
-
-This library uses React Native's **New Architecture (TurboModules)**:
-
-- Type-safe Codegen interfaces
-- Native implementations for iOS (ObjC++) and Android (Kotlin + JNI)
-- Shared C++ code using libwebp for encoding
-- Background threading for non-blocking operations
-
-See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for details.
-
-## Documentation
-
-- [API Reference](docs/API.md) - Complete API documentation
-- [Architecture](docs/ARCHITECTURE.md) - Technical architecture details
-- [Performance Guide](docs/PERFORMANCE.md) - Performance optimization tips
-- [Contributing](docs/CONTRIBUTING.md) - Development setup and guidelines
-- [Release Process](docs/RELEASE.md) - Versioning and release workflow
-- [Security](docs/SECURITY.md) - Security policy and considerations
-
-## Example App
-
-See the [example app](example/) for a complete usage example.
-
-```bash
-# Run example on iOS
-yarn example:ios
-
-# Run example on Android
-yarn example:android
-```
-
-## Contributing
-
-See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for development setup and guidelines.
-
-## License
-
-MIT
-
-## Related
-
-- [libwebp](https://github.com/webmproject/libwebp) - WebP encoding library
-- [React Native New Architecture](https://reactnative.dev/docs/the-new-architecture/landing-page) - TurboModules documentation
 
 ---
 
-Made with ❤️ for the React Native community
+## 🎨 Presets & Benchmarks
+
+The following benchmarks were run natively on an Android Emulator using an original 4K image (4017 x 2683, ~1.96 MB). Note that Github may resize or compress the embedded images below.
+
+| Preset     | Result (WebP) | Output Size | Space Saved | Notes                                                  |
+| ---------- | ------------- | ----------- | ----------- | ------------------------------------------------------ |
+| *Original* | <img src="samples/input-4k.jpg" width="300" /> | 1.96 MB | - | The raw 4K JPEG. |
+| `fast`     | <img src="samples/output-4k-fast.webp" width="300" /> | 980.9 KB    | ~50.0%      | Focused on encoding speed. Trades efficiency for speed.|
+| `balanced` | <img src="samples/output-4k-balanced.webp" width="300" /> | 1007.1 KB   | ~48.7%      | **Default**. Sweet spot for fidelity and size.         |
+| `small`    | <img src="samples/output-4k-small.webp" width="300" /> | 686.0 KB    | ~65.0%      | Aggressive compression. Massive real-world savings!    |
+| `lossless` | <img src="samples/output-4k-lossless.webp" width="300" /> | 10.37 MB    | *(+8.41 MB)* | Perfect mathematical recreation. Very large for 4K.    |
+
+> ⚠️ **Note on `lossless`**: Lossless WebP mathematically guarantees bit-for-bit recreation without throwing away any data. While extremely efficient for PNGs, passing a lossy format like a JPEG into the `lossless` preset will frequently result in an output file that is significantly larger than the original input.
+
+---
+
+## 📐 Resizing Recommendation
+
+Always set `maxLongEdge` to improve performance and save space:
+- **Thumbnails**: 512
+- **Mobile Display**: 1024
+- **Retina/Default**: 2048 (Recommended)
+
+---
+
+## 🛡️ License
+
+MIT. Made with ❤️ by the community.
