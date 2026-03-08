@@ -3006,7 +3006,7 @@ __metadata:
     react: "npm:19.2.0"
     react-native: "npm:0.83.0"
     react-native-builder-bob: "npm:^0.40.17"
-    react-native-image-picker: "npm:^7.1.2"
+    react-native-image-picker: "npm:^8.2.1"
     react-native-monorepo-config: "npm:^0.3.1"
   languageName: unknown
   linkType: soft
@@ -14793,13 +14793,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-native-image-picker@npm:^7.1.2":
-  version: 7.2.3
-  resolution: "react-native-image-picker@npm:7.2.3"
+"react-native-image-picker@npm:^8.2.1":
+  version: 8.2.1
+  resolution: "react-native-image-picker@npm:8.2.1"
   peerDependencies:
     react: "*"
     react-native: "*"
-  checksum: 10c0/0da1133e1ea2474577ebb91ba8af2f567d131489781ba2a73af0198f100c1ba5390cc9479e492abd7dd217c8bedc6f41794e961c7125aced9068ced07f2d96f5
+  checksum: 10c0/82b6c51ece8d16806975aff7675d26280fdd2391c05ca9415620195cc6643ca0db4601d3b24e117d7f5331c2e55ba7c03090d276e55b3b5687a636245428a047
   languageName: node
   linkType: hard
 
