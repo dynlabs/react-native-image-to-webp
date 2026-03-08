@@ -16,8 +16,6 @@ Convert any image to WebP format in milliseconds using React Native's **New Arch
 
 ---
 
-t
-
 ## 📦 Installation
 
 ```bash

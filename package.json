@@ -1,7 +1,7 @@
 {
   "name": "@dynlabs/react-native-image-to-webp",
-  "version": "1.0.0",
-  "description": "Convert images to WebP format with presets and resizing options",
+  "version": "1.0.1",
+  "description": "React Native TurboModule to convert JPEG and PNG images to WebP format with quality presets, resizing, and EXIF stripping — for iOS and Android",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
   "exports": {
@@ -47,13 +47,30 @@
   "keywords": [
     "react-native",
     "ios",
-    "android"
+    "android",
+    "webp",
+    "image",
+    "image-converter",
+    "image-compression",
+    "webp-converter",
+    "convert-to-webp",
+    "jpeg-to-webp",
+    "png-to-webp",
+    "libwebp",
+    "turbomodule",
+    "new-architecture",
+    "native-module",
+    "image-optimization",
+    "image-resize",
+    "exif",
+    "kotlin",
+    "swift"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/dynlabs/react-native-image-to-webp.git"
   },
-  "author": " <> ()",
+  "author": "dynlabs",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/dynlabs/react-native-image-to-webp/issues"
