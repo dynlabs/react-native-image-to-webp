@@ -218,30 +218,27 @@ static NSString *deriveOutputPath(NSString *inputPath, NSString *outputPath, NSS
   return [directory stringByAppendingPathComponent:newFilename];
 }
 
-- (void)convertImageToWebP:(NSDictionary *)options
-                   resolver:(RCTPromiseResolveBlock)resolve
-                   rejecter:(RCTPromiseRejectBlock)reject {
+- (void)convertImageToWebP:(JS::NativeReactNativeImageToWebp::ConvertOptions &)options
+                   resolve:(RCTPromiseResolveBlock)resolve
+                    reject:(RCTPromiseRejectBlock)reject {
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
     @autoreleasepool {
       NSError *error = nil;
 
       // Parse options
-      NSString *inputPath = options[@"inputPath"];
-      if (!inputPath || ![inputPath isKindOfClass:[NSString class]]) {
+      NSString *inputPath = options.inputPath();
+      if (!inputPath || inputPath.length == 0) {
         reject(kErrorCodeInvalidInput, @"inputPath is required", nil);
         return;
       }
 
-      NSString *preset = options[@"preset"] ?: @"balanced";
-      NSString *outputPath = deriveOutputPath(inputPath, options[@"outputPath"], preset);
-      NSNumber *maxLongEdge = options[@"maxLongEdge"];
-      NSNumber *quality = options[@"quality"] ?: @80;
-      NSNumber *method = options[@"method"] ?: @3;
-      NSNumber *lossless = options[@"lossless"] ?: @NO;
-      NSNumber *stripMetadata = options[@"stripMetadata"];
-      if (!stripMetadata) {
-        stripMetadata = @YES;
-      }
+      NSString *preset = options.preset() ?: @"balanced";
+      NSString *outputPath = deriveOutputPath(inputPath, options.outputPath(), preset);
+      NSNumber *maxLongEdge = options.maxLongEdge().has_value() ? @(options.maxLongEdge().value()) : nil;
+      NSNumber *quality = options.quality().has_value() ? @(options.quality().value()) : @80;
+      NSNumber *method = options.method().has_value() ? @(options.method().value()) : @3;
+      NSNumber *lossless = @(options.lossless().value_or(false));
+      NSNumber *stripMetadata = @(options.stripMetadata().value_or(true));
 
       // Check if input file exists
       if (![[NSFileManager defaultManager] fileExistsAtPath:inputPath]) {
@@ -261,14 +258,14 @@ static NSString *deriveOutputPath(NSString *inputPath, NSString *outputPath, NSS
       // Get image properties
       NSDictionary *properties = getImageProperties(source);
       if (!properties) {
-        CGImageSourceRelease(source);
+        CFRelease(source);
         reject(kErrorCodeDecodeFailed, @"Failed to read image properties", nil);
         return;
       }
 
       // Create CGImage
       CGImageRef image = CGImageSourceCreateImageAtIndex(source, 0, NULL);
-      CGImageSourceRelease(source);
+      CFRelease(source);
       if (!image) {
         reject(kErrorCodeDecodeFailed, @"Failed to decode image", nil);
         return;

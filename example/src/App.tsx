@@ -24,6 +24,7 @@ export default function App() {
     width: number;
     height: number;
   } | null>(null);
+  const [originalFileSize, setOriginalFileSize] = useState<number | null>(null);
   const { convert, isConverting, result, error } = useImageConverter();
 
   const handleSelectImage = async () => {
@@ -33,6 +34,7 @@ export default function App() {
     });
     if (response.assets?.[0]?.uri) {
       setInputImage(response.assets[0].uri);
+      setOriginalFileSize(response.assets[0].fileSize || null);
       setOriginalDim({
         width: response.assets[0].width || 0,
         height: response.assets[0].height || 0,
@@ -66,12 +68,19 @@ export default function App() {
 
         {inputImage && (
           <View style={styles.previewContainer}>
-            <Text style={styles.label}>
-              Original:{' '}
-              {originalDim?.width
-                ? `${originalDim.width}x${originalDim.height}`
-                : ''}
-            </Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={styles.label}>
+                Original:{' '}
+                {originalDim?.width
+                  ? `${originalDim.width}x${originalDim.height}`
+                  : ''}
+              </Text>
+              {originalFileSize ? (
+                <Text style={styles.label}>
+                  Size: {(originalFileSize / 1024).toFixed(1)} KB
+                </Text>
+              ) : null}
+            </View>
             <Image
               source={{ uri: inputImage }}
               style={styles.image}

@@ -21,8 +21,9 @@ Pod::Spec.new do |s|
   s.dependency "libwebp", "~> 1.5"
   s.compiler_flags = "-O3 -DNDEBUG -DWEBP_AVAILABLE"
   s.pod_target_xcconfig = {
-    "HEADER_SEARCH_PATHS" => "$(inherited) ${PODS_ROOT}/Headers/Private/React-Core",
-    "OTHER_CPLUSPLUSFLAGS" => "$(OTHER_CFLAGS) -std=c++17"
+    "HEADER_SEARCH_PATHS" => "\"$(inherited)\" \"${PODS_ROOT}/Headers/Private/React-Core\" \"${PODS_ROOT}/libwebp/src\"",
+    "OTHER_CPLUSPLUSFLAGS" => "$(OTHER_CFLAGS)",
+    "CLANG_CXX_LANGUAGE_STANDARD" => "c++20"
   }
 
   install_modules_dependencies(s)
