@@ -1,10 +1,44 @@
-import { useState, useCallback } from 'react';
+import { useReducer, useCallback } from 'react';
 import {
   convertImageToWebP,
   type ConvertOptions,
   type ConvertResult,
   ImageToWebPError,
 } from './index';
+
+type ConverterState =
+  | { status: 'idle'; result: null; error: null }
+  | { status: 'converting'; result: null; error: null }
+  | { status: 'success'; result: ConvertResult; error: null }
+  | { status: 'error'; result: null; error: ImageToWebPError | Error };
+
+type ConverterAction =
+  | { type: 'START' }
+  | { type: 'SUCCESS'; result: ConvertResult }
+  | { type: 'ERROR'; error: ImageToWebPError | Error }
+  | { type: 'RESET' };
+
+const INITIAL_STATE: ConverterState = {
+  status: 'idle',
+  result: null,
+  error: null,
+};
+
+function converterReducer(
+  _state: ConverterState,
+  action: ConverterAction
+): ConverterState {
+  switch (action.type) {
+    case 'START':
+      return { status: 'converting', result: null, error: null };
+    case 'SUCCESS':
+      return { status: 'success', result: action.result, error: null };
+    case 'ERROR':
+      return { status: 'error', result: null, error: action.error };
+    case 'RESET':
+      return INITIAL_STATE;
+  }
+}
 
 export interface UseImageConverterResult {
   /**
@@ -21,8 +55,6 @@ export interface UseImageConverterResult {
   error: ImageToWebPError | Error | null;
   /**
    * Function to trigger a conversion.
-   *
-   * @param options - Conversion options. If not provided, will use the options passed to the hook.
    */
   convert: (options: ConvertOptions) => Promise<ConvertResult>;
   /**
@@ -45,39 +77,32 @@ export interface UseImageConverterResult {
  * ```
  */
 export function useImageConverter(): UseImageConverterResult {
-  const [isConverting, setIsConverting] = useState<boolean>(false);
-  const [result, setResult] = useState<ConvertResult | null>(null);
-  const [error, setError] = useState<ImageToWebPError | Error | null>(null);
+  const [state, dispatch] = useReducer(converterReducer, INITIAL_STATE);
 
   const convert = useCallback(
     async (options: ConvertOptions): Promise<ConvertResult> => {
-      setIsConverting(true);
-      setError(null);
+      dispatch({ type: 'START' });
       try {
         const res = await convertImageToWebP(options);
-        setResult(res);
+        dispatch({ type: 'SUCCESS', result: res });
         return res;
       } catch (err) {
         const e = err instanceof Error ? err : new Error(String(err));
-        setError(e);
+        dispatch({ type: 'ERROR', error: e });
         throw e;
-      } finally {
-        setIsConverting(false);
       }
     },
     []
   );
 
   const reset = useCallback(() => {
-    setIsConverting(false);
-    setResult(null);
-    setError(null);
+    dispatch({ type: 'RESET' });
   }, []);
 
   return {
-    isConverting,
-    result,
-    error,
+    isConverting: state.status === 'converting',
+    result: state.result,
+    error: state.error,
     convert,
     reset,
   };

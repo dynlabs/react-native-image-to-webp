@@ -32,6 +32,83 @@ export class ImageToWebPError extends Error {
   }
 }
 
+type ErrorEntry = [
+  pattern: string,
+  code: ErrorCode,
+  getMessage: (nativeMsg: string, inputPath: string) => string
+];
+
+const NATIVE_ERROR_MAP: ErrorEntry[] = [
+  [
+    'FILE_NOT_FOUND',
+    ERROR_CODES.FILE_NOT_FOUND,
+    (_, path) => `File not found: ${path}`,
+  ],
+  [
+    'DECODE_FAILED',
+    ERROR_CODES.DECODE_FAILED,
+    (msg) => `Failed to decode image: ${msg}`,
+  ],
+  [
+    'ENCODE_FAILED',
+    ERROR_CODES.ENCODE_FAILED,
+    (msg) => `Failed to encode WebP: ${msg}`,
+  ],
+  ['IO_ERROR', ERROR_CODES.IO_ERROR, (msg) => `I/O error: ${msg}`],
+  [
+    'UNSUPPORTED_FORMAT',
+    ERROR_CODES.UNSUPPORTED_FORMAT,
+    (msg) => `Unsupported image format: ${msg}`,
+  ],
+  [
+    'INVALID_INPUT',
+    ERROR_CODES.INVALID_INPUT,
+    (msg) => `Invalid input: ${msg}`,
+  ],
+];
+
+/**
+ * URI schemes that must reach the native layer untouched. These are resolved
+ * natively — `content://` / `android.resource://` via Android's ContentResolver,
+ * and `ph://` / `assets-library://` via iOS PhotoKit — so they cannot be turned
+ * into a raw filesystem path here.
+ */
+const PASSTHROUGH_SCHEME =
+  /^(content|android\.resource|ph|assets-library):\/\//;
+
+/**
+ * Normalize an input path for the native layer.
+ *
+ * Modern React Native image sources (`react-native-image-picker`,
+ * `expo-image-picker`, CameraRoll, the Android 13+ system Photo Picker) return
+ * URIs rather than raw paths. `content://`/`ph://` URIs are passed through so
+ * native can resolve them; `file://` URIs are percent-decoded into the raw
+ * filesystem path the native decoders expect.
+ */
+function normalizeInputPath(inputPath: string): string {
+  if (PASSTHROUGH_SCHEME.test(inputPath)) {
+    return inputPath;
+  }
+  if (inputPath.startsWith('file://')) {
+    const withoutScheme = inputPath.replace(/^file:\/\//, '');
+    try {
+      return decodeURIComponent(withoutScheme);
+    } catch {
+      return withoutScheme;
+    }
+  }
+  return inputPath;
+}
+
+function mapNativeError(error: Error, inputPath: string): ImageToWebPError {
+  for (const [pattern, code, getMessage] of NATIVE_ERROR_MAP) {
+    if (error.message.includes(pattern)) {
+      return new ImageToWebPError(code, getMessage(error.message, inputPath));
+    }
+  }
+  return new ImageToWebPError(ERROR_CODES.IO_ERROR, error.message);
+}
+
 /**
  * Convert an image file to WebP format.
  *
@@ -52,73 +129,24 @@ export class ImageToWebPError extends Error {
 export async function convertImageToWebP(
   options: ConvertOptions
 ): Promise<ConvertResult> {
-  // Validate input
   const validationError = validateOptions(options);
   if (validationError) {
     throw new ImageToWebPError(validationError.code, validationError.message);
   }
 
-  // Strip file:// prefix here since native layers expect raw paths
-  let normalizedInputPath = options.inputPath;
-  if (normalizedInputPath.startsWith('file://')) {
-    normalizedInputPath = normalizedInputPath.replace(/^file:\/\//, '');
-  }
+  const normalizedInputPath = normalizeInputPath(options.inputPath);
 
-  // Apply preset defaults
   const finalOptions = applyPreset({
     ...options,
     inputPath: normalizedInputPath,
+    preset: options.preset ?? 'balanced',
   });
-
-  // Ensure preset is included in options for native module to use in filename
-  if (!finalOptions.preset && options.preset) {
-    finalOptions.preset = options.preset;
-  } else if (!finalOptions.preset) {
-    finalOptions.preset = 'balanced'; // Default preset
-  }
 
   try {
     return await NativeReactNativeImageToWebp.convertImageToWebP(finalOptions);
   } catch (error) {
-    // Map native errors to our error types
     if (error instanceof Error) {
-      const message = error.message;
-      if (message.includes('FILE_NOT_FOUND')) {
-        throw new ImageToWebPError(
-          ERROR_CODES.FILE_NOT_FOUND,
-          `File not found: ${options.inputPath}`
-        );
-      }
-      if (message.includes('DECODE_FAILED')) {
-        throw new ImageToWebPError(
-          ERROR_CODES.DECODE_FAILED,
-          `Failed to decode image: ${message}`
-        );
-      }
-      if (message.includes('ENCODE_FAILED')) {
-        throw new ImageToWebPError(
-          ERROR_CODES.ENCODE_FAILED,
-          `Failed to encode WebP: ${message}`
-        );
-      }
-      if (message.includes('IO_ERROR')) {
-        throw new ImageToWebPError(
-          ERROR_CODES.IO_ERROR,
-          `I/O error: ${message}`
-        );
-      }
-      if (message.includes('UNSUPPORTED_FORMAT')) {
-        throw new ImageToWebPError(
-          ERROR_CODES.UNSUPPORTED_FORMAT,
-          `Unsupported image format: ${message}`
-        );
-      }
-      if (message.includes('INVALID_INPUT')) {
-        throw new ImageToWebPError(
-          ERROR_CODES.INVALID_INPUT,
-          `Invalid input: ${message}`
-        );
-      }
+      throw mapNativeError(error, options.inputPath);
     }
     throw error;
   }

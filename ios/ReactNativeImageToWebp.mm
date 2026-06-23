@@ -4,6 +4,7 @@
 #import <CoreGraphics/CoreGraphics.h>
 #import <Accelerate/Accelerate.h>
 #import <Foundation/Foundation.h>
+#import <Photos/Photos.h>
 #import "ImageToWebP.h"
 
 // Error domain
@@ -51,6 +52,73 @@ static CGImageSourceRef createImageSource(NSString *path, NSError **error) {
   }
 
   return source;
+}
+
+// Build a CGImageSource from a PhotoKit asset URI (ph://<localIdentifier>).
+// Modern image sources such as CameraRoll / expo-media-library return ph://
+// URIs rather than file paths; these are resolved through PhotoKit.
+//
+// Note: this requires the host app to have photo library access and an
+// NSPhotoLibraryUsageDescription entry in Info.plist.
+static CGImageSourceRef createImageSourceFromPhotoAsset(NSString *inputPath, NSError **error) {
+  NSString *localId = nil;
+  if ([inputPath hasPrefix:@"ph://"]) {
+    localId = [inputPath substringFromIndex:[@"ph://" length]];
+  } else if ([inputPath hasPrefix:@"assets-library://"]) {
+    localId = inputPath;
+  }
+
+  if (localId.length == 0) {
+    if (error) {
+      *error = [NSError errorWithDomain:kErrorDomain
+                                   code:1
+                               userInfo:@{NSLocalizedDescriptionKey: @"Invalid photo asset URI",
+                                          @"code": kErrorCodeInvalidInput}];
+    }
+    return NULL;
+  }
+
+  PHFetchResult<PHAsset *> *assets =
+      [PHAsset fetchAssetsWithLocalIdentifiers:@[localId] options:nil];
+  PHAsset *asset = assets.firstObject;
+  if (!asset) {
+    if (error) {
+      *error = [NSError errorWithDomain:kErrorDomain
+                                   code:1
+                               userInfo:@{NSLocalizedDescriptionKey: @"Photo asset not found (check photo library permission)",
+                                          @"code": kErrorCodeFileNotFound}];
+    }
+    return NULL;
+  }
+
+  __block NSData *imageData = nil;
+  PHImageRequestOptions *requestOptions = [[PHImageRequestOptions alloc] init];
+  requestOptions.synchronous = YES; // safe: we are already on a background queue
+  requestOptions.networkAccessAllowed = YES;
+  requestOptions.version = PHImageRequestOptionsVersionCurrent;
+  requestOptions.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
+
+  [[PHImageManager defaultManager]
+      requestImageDataAndOrientationForAsset:asset
+                                     options:requestOptions
+                               resultHandler:^(NSData *_Nullable data,
+                                               NSString *_Nullable dataUTI,
+                                               CGImagePropertyOrientation orientation,
+                                               NSDictionary *_Nullable info) {
+                                 imageData = data;
+                               }];
+
+  if (!imageData) {
+    if (error) {
+      *error = [NSError errorWithDomain:kErrorDomain
+                                   code:1
+                               userInfo:@{NSLocalizedDescriptionKey: @"Failed to load photo asset data",
+                                          @"code": kErrorCodeDecodeFailed}];
+    }
+    return NULL;
+  }
+
+  return CGImageSourceCreateWithData((__bridge CFDataRef)imageData, NULL);
 }
 
 // Get image properties including orientation
@@ -207,9 +275,17 @@ static uint8_t *createRGBABuffer(CGImageRef image, uint32_t *outWidth, uint32_t 
 }
 
 // Derive output path from input path if not provided
-static NSString *deriveOutputPath(NSString *inputPath, NSString *outputPath, NSString *preset) {
+static NSString *deriveOutputPath(NSString *inputPath, NSString *outputPath, BOOL isPhotoAsset) {
   if (outputPath && outputPath.length > 0) {
     return outputPath;
+  }
+
+  // A ph:// asset has no writable parent directory, so default its output into
+  // the temporary directory with a unique name.
+  if (isPhotoAsset) {
+    NSString *filename = [NSString stringWithFormat:@"image_%.0f.webp",
+                          [[NSDate date] timeIntervalSince1970] * 1000];
+    return [NSTemporaryDirectory() stringByAppendingPathComponent:filename];
   }
 
   NSString *directory = [inputPath stringByDeletingLastPathComponent];
@@ -232,22 +308,34 @@ static NSString *deriveOutputPath(NSString *inputPath, NSString *outputPath, NSS
         return;
       }
 
-      NSString *preset = options.preset() ?: @"balanced";
-      NSString *outputPath = deriveOutputPath(inputPath, options.outputPath(), preset);
+      BOOL isPhotoAsset = [inputPath hasPrefix:@"ph://"] ||
+                          [inputPath hasPrefix:@"assets-library://"];
+
       NSNumber *maxLongEdge = options.maxLongEdge().has_value() ? @(options.maxLongEdge().value()) : nil;
       NSNumber *quality = options.quality().has_value() ? @(options.quality().value()) : @80;
       NSNumber *method = options.method().has_value() ? @(options.method().value()) : @3;
       NSNumber *lossless = @(options.lossless().value_or(false));
       NSNumber *stripMetadata = @(options.stripMetadata().value_or(true));
+      NSString *outputPath = deriveOutputPath(inputPath, options.outputPath(), isPhotoAsset);
 
-      // Check if input file exists
-      if (![[NSFileManager defaultManager] fileExistsAtPath:inputPath]) {
-        reject(kErrorCodeFileNotFound, [NSString stringWithFormat:@"File not found: %@", inputPath], nil);
-        return;
+      // Create image source, either from a PhotoKit asset or a file path.
+      CGImageSourceRef source;
+      if (isPhotoAsset) {
+        source = createImageSourceFromPhotoAsset(inputPath, &error);
+      } else {
+        // Defensively strip a file:// scheme in case it reaches the native layer.
+        NSString *filePath = inputPath;
+        if ([inputPath hasPrefix:@"file://"]) {
+          filePath = [NSURL URLWithString:inputPath].path ?: inputPath;
+        }
+
+        if (![[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
+          reject(kErrorCodeFileNotFound, [NSString stringWithFormat:@"File not found: %@", filePath], nil);
+          return;
+        }
+        source = createImageSource(filePath, &error);
       }
 
-      // Create image source
-      CGImageSourceRef source = createImageSource(inputPath, &error);
       if (!source) {
         reject(error.userInfo[@"code"] ?: kErrorCodeDecodeFailed,
                error.localizedDescription ?: @"Failed to create image source",
