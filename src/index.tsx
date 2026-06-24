@@ -2,13 +2,20 @@ import NativeReactNativeImageToWebp, {
   type ConvertOptions,
   type ConvertResult,
   type ConvertPreset,
+  type EncodeMethod,
 } from './NativeReactNativeImageToWebp';
 import { validateOptions } from './validation';
 import { applyPreset } from './presets';
 
-export type { ConvertOptions, ConvertResult, ConvertPreset };
+export type { ConvertOptions, ConvertResult, ConvertPreset, EncodeMethod };
 export { useImageConverter } from './useImageConverter';
 export type { UseImageConverterResult } from './useImageConverter';
+export {
+  convertImageToWebPBatch,
+  type BatchConvertOptions,
+  type BatchConvertResult,
+  type BatchResultEntry,
+} from './batch';
 
 const ERROR_CODES = {
   INVALID_INPUT: 'INVALID_INPUT',
@@ -113,22 +120,30 @@ function mapNativeError(error: Error, inputPath: string): ImageToWebPError {
  * Convert an image file to WebP format.
  *
  * @param options - Conversion options
+ * @param signal - Optional `AbortSignal` to cancel the conversion.
+ *   The native encode operation itself cannot be interrupted mid-flight, but
+ *   the promise rejects as `AbortError` and the result is discarded.
  * @returns Promise resolving to conversion result with output path and metadata
  * @throws {ImageToWebPError} If conversion fails
  *
  * @example
  * ```ts
- * const result = await convertImageToWebP({
- *   inputPath: '/path/to/image.jpg',
- *   preset: 'balanced',
- *   maxLongEdge: 2048,
- * });
+ * const controller = new AbortController();
+ * const result = await convertImageToWebP(
+ *   { inputPath: '/path/to/image.jpg', preset: 'balanced', maxLongEdge: 2048 },
+ *   controller.signal,
+ * );
  * console.log(`Output: ${result.outputPath}, Size: ${result.sizeBytes} bytes`);
  * ```
  */
 export async function convertImageToWebP(
-  options: ConvertOptions
+  options: ConvertOptions,
+  signal?: AbortSignal
 ): Promise<ConvertResult> {
+  if (signal?.aborted) {
+    throw makeAbortError(signal);
+  }
+
   const validationError = validateOptions(options);
   if (validationError) {
     throw new ImageToWebPError(validationError.code, validationError.message);
@@ -142,14 +157,40 @@ export async function convertImageToWebP(
     preset: options.preset ?? 'balanced',
   });
 
+  const nativePromise =
+    NativeReactNativeImageToWebp.convertImageToWebP(finalOptions);
+
   try {
-    return await NativeReactNativeImageToWebp.convertImageToWebP(finalOptions);
+    return await (signal
+      ? Promise.race([nativePromise, abortPromise(signal)])
+      : nativePromise);
   } catch (error) {
     if (error instanceof Error) {
+      if (error.name === 'AbortError') throw error;
       throw mapNativeError(error, options.inputPath);
     }
     throw error;
   }
+}
+
+function abortPromise(signal: AbortSignal): Promise<never> {
+  return new Promise((_, reject) => {
+    if (signal.aborted) {
+      reject(makeAbortError(signal));
+      return;
+    }
+    signal.addEventListener('abort', () => reject(makeAbortError(signal)), {
+      once: true,
+    });
+  });
+}
+
+function makeAbortError(signal: AbortSignal): Error {
+  const reason = (signal as AbortSignal & { reason?: unknown }).reason;
+  if (reason instanceof Error) return reason;
+  const err = new Error('Conversion aborted');
+  err.name = 'AbortError';
+  return err;
 }
 
 export { ERROR_CODES };

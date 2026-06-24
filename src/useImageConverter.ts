@@ -1,4 +1,4 @@
-import { useReducer, useCallback } from 'react';
+import { useReducer, useCallback, useRef, useEffect } from 'react';
 import {
   convertImageToWebP,
   type ConvertOptions,
@@ -54,11 +54,16 @@ export interface UseImageConverterResult {
    */
   error: ImageToWebPError | Error | null;
   /**
-   * Function to trigger a conversion.
+   * Trigger a conversion. Pass an `AbortSignal` to cancel it.
+   * Calling `convert()` a second time before the first finishes
+   * discards the first result — only the latest call updates state.
    */
-  convert: (options: ConvertOptions) => Promise<ConvertResult>;
+  convert: (
+    options: ConvertOptions,
+    signal?: AbortSignal
+  ) => Promise<ConvertResult>;
   /**
-   * Resets the state of the hook.
+   * Reset state back to idle, clearing any result or error.
    */
   reset: () => void;
 }
@@ -66,12 +71,19 @@ export interface UseImageConverterResult {
 /**
  * A hook that provides a simplified interface for converting images to WebP.
  *
+ * State updates are guarded against two common bugs:
+ * - **Stale results**: if `convert()` is called again before the previous
+ *   call resolves, the first result is silently discarded.
+ * - **Post-unmount updates**: dispatches that fire after the component unmounts
+ *   are no-ops.
+ *
  * @example
  * ```ts
  * const { convert, isConverting, result, error } = useImageConverter();
  *
  * const handleConvert = async () => {
- *   const res = await convert({ inputPath: '...' });
+ *   const controller = new AbortController();
+ *   const res = await convert({ inputPath: '...' }, controller.signal);
  *   console.log(res.outputPath);
  * };
  * ```
@@ -79,16 +91,39 @@ export interface UseImageConverterResult {
 export function useImageConverter(): UseImageConverterResult {
   const [state, dispatch] = useReducer(converterReducer, INITIAL_STATE);
 
+  // Tracks whether the component is still mounted. Safe to read synchronously
+  // inside async callbacks because refs persist across re-renders.
+  const isMountedRef = useRef(true);
+  useEffect(
+    () => () => {
+      isMountedRef.current = false;
+    },
+    []
+  );
+
+  // Incremented on each `convert()` call. If a newer call starts before an
+  // older one resolves, the older result is dropped.
+  const generationRef = useRef(0);
+
   const convert = useCallback(
-    async (options: ConvertOptions): Promise<ConvertResult> => {
+    async (
+      options: ConvertOptions,
+      signal?: AbortSignal
+    ): Promise<ConvertResult> => {
+      const generation = ++generationRef.current;
+
       dispatch({ type: 'START' });
       try {
-        const res = await convertImageToWebP(options);
-        dispatch({ type: 'SUCCESS', result: res });
+        const res = await convertImageToWebP(options, signal);
+        if (isMountedRef.current && generationRef.current === generation) {
+          dispatch({ type: 'SUCCESS', result: res });
+        }
         return res;
       } catch (err) {
         const e = err instanceof Error ? err : new Error(String(err));
-        dispatch({ type: 'ERROR', error: e });
+        if (isMountedRef.current && generationRef.current === generation) {
+          dispatch({ type: 'ERROR', error: e });
+        }
         throw e;
       }
     },

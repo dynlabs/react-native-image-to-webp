@@ -3,6 +3,8 @@ package com.dynlabs.reactnativeimagetowebp
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.net.Uri
 import android.os.Build
 import com.facebook.react.bridge.Arguments
@@ -178,7 +180,8 @@ class ReactNativeImageToWebpModule(reactContext: ReactApplicationContext) :
         BitmapFactory.decodeFile(file.absolutePath, bounds)
 
         val options = buildFallbackOptions(bounds, maxLongEdge)
-        val bitmap = BitmapFactory.decodeFile(file.absolutePath, options) ?: return null
+        val raw = BitmapFactory.decodeFile(file.absolutePath, options) ?: return null
+        val bitmap = applyExifOrientationFromFile(raw, file)
         finalizeBitmap(bitmap, maxLongEdge)
       }
     } catch (e: Exception) {
@@ -200,9 +203,13 @@ class ReactNativeImageToWebpModule(reactContext: ReactApplicationContext) :
         }
 
         val options = buildFallbackOptions(bounds, maxLongEdge)
-        val bitmap = openUriStream(resolver, uri).use { input ->
+        val raw = openUriStream(resolver, uri).use { input ->
           BitmapFactory.decodeStream(input, null, options)
         } ?: return null
+        // ExifInterface(InputStream) is available from API 24 (our minSdk).
+        val bitmap = openUriStream(resolver, uri).use { exifStream ->
+          applyExifOrientationFromStream(raw, exifStream)
+        }
         finalizeBitmap(bitmap, maxLongEdge)
       }
     } catch (e: FileNotFoundException) {
@@ -283,6 +290,51 @@ class ReactNativeImageToWebpModule(reactContext: ReactApplicationContext) :
       }
     }
     return result
+  }
+
+  private fun applyExifOrientationFromFile(bitmap: Bitmap, file: File): Bitmap {
+    return try {
+      rotateBitmapForExif(bitmap, ExifInterface(file.absolutePath))
+    } catch (e: Exception) {
+      bitmap
+    }
+  }
+
+  private fun applyExifOrientationFromStream(bitmap: Bitmap, stream: InputStream): Bitmap {
+    return try {
+      rotateBitmapForExif(bitmap, ExifInterface(stream))
+    } catch (e: Exception) {
+      bitmap
+    }
+  }
+
+  private fun rotateBitmapForExif(bitmap: Bitmap, exif: ExifInterface): Bitmap {
+    val orientation = exif.getAttributeInt(
+      ExifInterface.TAG_ORIENTATION,
+      ExifInterface.ORIENTATION_NORMAL
+    )
+
+    val matrix = Matrix()
+    when (orientation) {
+      ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.setScale(-1f, 1f)
+      ExifInterface.ORIENTATION_ROTATE_180 -> matrix.setRotate(180f)
+      ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.setScale(1f, -1f)
+      ExifInterface.ORIENTATION_TRANSPOSE -> {
+        matrix.setRotate(90f)
+        matrix.postScale(-1f, 1f)
+      }
+      ExifInterface.ORIENTATION_ROTATE_90 -> matrix.setRotate(90f)
+      ExifInterface.ORIENTATION_TRANSVERSE -> {
+        matrix.setRotate(-90f)
+        matrix.postScale(-1f, 1f)
+      }
+      ExifInterface.ORIENTATION_ROTATE_270 -> matrix.setRotate(-90f)
+      else -> return bitmap // ORIENTATION_NORMAL or unrecognised: no transform
+    }
+
+    val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    if (rotated != bitmap) bitmap.recycle()
+    return rotated
   }
 
   private fun bitmapToRGBA(bitmap: Bitmap): ByteArray {

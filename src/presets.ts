@@ -1,11 +1,12 @@
 import type {
   ConvertOptions,
   ConvertPreset,
+  EncodeMethod,
 } from './NativeReactNativeImageToWebp';
 
 interface PresetConfig {
   quality?: number;
-  method?: number;
+  method?: EncodeMethod;
   lossless?: boolean;
   stripMetadata?: boolean;
   threadLevel?: number;
