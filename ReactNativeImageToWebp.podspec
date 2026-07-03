@@ -16,6 +16,10 @@ Pod::Spec.new do |s|
   s.source_files = "ios/**/*.{h,m,mm,swift,cpp}", "cpp/**/*.{h,cpp}"
   s.private_header_files = "ios/**/*.h", "cpp/**/*.h"
 
+  # Photos is required to resolve ph:// PhotoKit asset URIs; ImageIO/CoreGraphics
+  # back the image decoding pipeline.
+  s.frameworks = "Photos", "ImageIO", "CoreGraphics"
+
   # Use CocoaPods dependency for libwebp
   # Note: libwebp pod is available up to version 1.5.0
   s.dependency "libwebp", "~> 1.5"

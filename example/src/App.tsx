@@ -5,7 +5,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
-  TouchableOpacity,
+  Pressable,
   View,
   Image,
   ActivityIndicator,
@@ -34,10 +34,10 @@ export default function App() {
     });
     if (response.assets?.[0]?.uri) {
       setInputImage(response.assets[0].uri);
-      setOriginalFileSize(response.assets[0].fileSize || null);
+      setOriginalFileSize(response.assets[0].fileSize ?? null);
       setOriginalDim({
-        width: response.assets[0].width || 0,
-        height: response.assets[0].height || 0,
+        width: response.assets[0].width ?? 0,
+        height: response.assets[0].height ?? 0,
       });
     }
   };
@@ -45,10 +45,7 @@ export default function App() {
   const handleConvert = async (preset: ConvertPreset) => {
     if (!inputImage) return;
     try {
-      await convert({
-        inputPath: inputImage,
-        preset,
-      });
+      await convert({ inputPath: inputImage, preset });
     } catch (e) {
       console.error(e);
     }
@@ -60,26 +57,32 @@ export default function App() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.title}>WebP Converter</Text>
 
-        <TouchableOpacity style={styles.button} onPress={handleSelectImage}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.button,
+            pressed && styles.buttonPressed,
+          ]}
+          onPress={handleSelectImage}
+        >
           <Text style={styles.buttonText}>
             {inputImage ? 'Change Image' : 'Select Image'}
           </Text>
-        </TouchableOpacity>
+        </Pressable>
 
         {inputImage && (
           <View style={styles.previewContainer}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <View style={styles.metaRow}>
               <Text style={styles.label}>
                 Original:{' '}
                 {originalDim?.width
                   ? `${originalDim.width}x${originalDim.height}`
                   : ''}
               </Text>
-              {originalFileSize ? (
+              {originalFileSize != null && (
                 <Text style={styles.label}>
                   Size: {(originalFileSize / 1024).toFixed(1)} KB
                 </Text>
-              ) : null}
+              )}
             </View>
             <Image
               source={{ uri: inputImage }}
@@ -96,14 +99,18 @@ export default function App() {
 
             <View style={styles.presetContainer}>
               {PRESETS.map((p) => (
-                <TouchableOpacity
+                <Pressable
                   key={p}
-                  style={[styles.presetButton, isConverting && styles.disabled]}
+                  style={({ pressed }) => [
+                    styles.presetButton,
+                    pressed && styles.presetButtonPressed,
+                    isConverting && styles.disabled,
+                  ]}
                   onPress={() => handleConvert(p)}
                   disabled={isConverting}
                 >
                   <Text style={styles.presetText}>{p}</Text>
-                </TouchableOpacity>
+                </Pressable>
               ))}
             </View>
           </View>
@@ -163,7 +170,9 @@ const styles = StyleSheet.create({
     marginBottom: 30,
     elevation: 2,
   },
+  buttonPressed: { opacity: 0.8 },
   buttonText: { color: '#FFF', fontSize: 18, fontWeight: '600' },
+  metaRow: { flexDirection: 'row', justifyContent: 'space-between' },
   previewContainer: { width: '100%', marginBottom: 30 },
   label: { fontSize: 16, fontWeight: '600', color: '#666', marginBottom: 10 },
   image: {
@@ -185,6 +194,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 8,
   },
+  presetButtonPressed: { opacity: 0.75 },
   presetText: { color: '#FFF', fontWeight: '600', textTransform: 'capitalize' },
   disabled: { opacity: 0.5 },
   loader: { marginVertical: 20 },

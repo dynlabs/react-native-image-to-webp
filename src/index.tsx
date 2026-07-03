@@ -2,13 +2,20 @@ import NativeReactNativeImageToWebp, {
   type ConvertOptions,
   type ConvertResult,
   type ConvertPreset,
+  type EncodeMethod,
 } from './NativeReactNativeImageToWebp';
 import { validateOptions } from './validation';
 import { applyPreset } from './presets';
 
-export type { ConvertOptions, ConvertResult, ConvertPreset };
+export type { ConvertOptions, ConvertResult, ConvertPreset, EncodeMethod };
 export { useImageConverter } from './useImageConverter';
 export type { UseImageConverterResult } from './useImageConverter';
+export {
+  convertImageToWebPBatch,
+  type BatchConvertOptions,
+  type BatchConvertResult,
+  type BatchResultEntry,
+} from './batch';
 
 const ERROR_CODES = {
   INVALID_INPUT: 'INVALID_INPUT',
@@ -32,96 +39,158 @@ export class ImageToWebPError extends Error {
   }
 }
 
+type ErrorEntry = [
+  pattern: string,
+  code: ErrorCode,
+  getMessage: (nativeMsg: string, inputPath: string) => string
+];
+
+const NATIVE_ERROR_MAP: ErrorEntry[] = [
+  [
+    'FILE_NOT_FOUND',
+    ERROR_CODES.FILE_NOT_FOUND,
+    (_, path) => `File not found: ${path}`,
+  ],
+  [
+    'DECODE_FAILED',
+    ERROR_CODES.DECODE_FAILED,
+    (msg) => `Failed to decode image: ${msg}`,
+  ],
+  [
+    'ENCODE_FAILED',
+    ERROR_CODES.ENCODE_FAILED,
+    (msg) => `Failed to encode WebP: ${msg}`,
+  ],
+  ['IO_ERROR', ERROR_CODES.IO_ERROR, (msg) => `I/O error: ${msg}`],
+  [
+    'UNSUPPORTED_FORMAT',
+    ERROR_CODES.UNSUPPORTED_FORMAT,
+    (msg) => `Unsupported image format: ${msg}`,
+  ],
+  [
+    'INVALID_INPUT',
+    ERROR_CODES.INVALID_INPUT,
+    (msg) => `Invalid input: ${msg}`,
+  ],
+];
+
+/**
+ * URI schemes that must reach the native layer untouched. These are resolved
+ * natively — `content://` / `android.resource://` via Android's ContentResolver,
+ * and `ph://` / `assets-library://` via iOS PhotoKit — so they cannot be turned
+ * into a raw filesystem path here.
+ */
+const PASSTHROUGH_SCHEME =
+  /^(content|android\.resource|ph|assets-library):\/\//;
+
+/**
+ * Normalize an input path for the native layer.
+ *
+ * Modern React Native image sources (`react-native-image-picker`,
+ * `expo-image-picker`, CameraRoll, the Android 13+ system Photo Picker) return
+ * URIs rather than raw paths. `content://`/`ph://` URIs are passed through so
+ * native can resolve them; `file://` URIs are percent-decoded into the raw
+ * filesystem path the native decoders expect.
+ */
+function normalizeInputPath(inputPath: string): string {
+  if (PASSTHROUGH_SCHEME.test(inputPath)) {
+    return inputPath;
+  }
+  if (inputPath.startsWith('file://')) {
+    const withoutScheme = inputPath.replace(/^file:\/\//, '');
+    try {
+      return decodeURIComponent(withoutScheme);
+    } catch {
+      return withoutScheme;
+    }
+  }
+  return inputPath;
+}
+
+function mapNativeError(error: Error, inputPath: string): ImageToWebPError {
+  for (const [pattern, code, getMessage] of NATIVE_ERROR_MAP) {
+    if (error.message.includes(pattern)) {
+      return new ImageToWebPError(code, getMessage(error.message, inputPath));
+    }
+  }
+  return new ImageToWebPError(ERROR_CODES.IO_ERROR, error.message);
+}
+
 /**
  * Convert an image file to WebP format.
  *
  * @param options - Conversion options
+ * @param signal - Optional `AbortSignal` to cancel the conversion.
+ *   The native encode operation itself cannot be interrupted mid-flight, but
+ *   the promise rejects as `AbortError` and the result is discarded.
  * @returns Promise resolving to conversion result with output path and metadata
  * @throws {ImageToWebPError} If conversion fails
  *
  * @example
  * ```ts
- * const result = await convertImageToWebP({
- *   inputPath: '/path/to/image.jpg',
- *   preset: 'balanced',
- *   maxLongEdge: 2048,
- * });
+ * const controller = new AbortController();
+ * const result = await convertImageToWebP(
+ *   { inputPath: '/path/to/image.jpg', preset: 'balanced', maxLongEdge: 2048 },
+ *   controller.signal,
+ * );
  * console.log(`Output: ${result.outputPath}, Size: ${result.sizeBytes} bytes`);
  * ```
  */
 export async function convertImageToWebP(
-  options: ConvertOptions
+  options: ConvertOptions,
+  signal?: AbortSignal
 ): Promise<ConvertResult> {
-  // Validate input
+  if (signal?.aborted) {
+    throw makeAbortError(signal);
+  }
+
   const validationError = validateOptions(options);
   if (validationError) {
     throw new ImageToWebPError(validationError.code, validationError.message);
   }
 
-  // Strip file:// prefix here since native layers expect raw paths
-  let normalizedInputPath = options.inputPath;
-  if (normalizedInputPath.startsWith('file://')) {
-    normalizedInputPath = normalizedInputPath.replace(/^file:\/\//, '');
-  }
+  const normalizedInputPath = normalizeInputPath(options.inputPath);
 
-  // Apply preset defaults
   const finalOptions = applyPreset({
     ...options,
     inputPath: normalizedInputPath,
+    preset: options.preset ?? 'balanced',
   });
 
-  // Ensure preset is included in options for native module to use in filename
-  if (!finalOptions.preset && options.preset) {
-    finalOptions.preset = options.preset;
-  } else if (!finalOptions.preset) {
-    finalOptions.preset = 'balanced'; // Default preset
-  }
+  const nativePromise =
+    NativeReactNativeImageToWebp.convertImageToWebP(finalOptions);
 
   try {
-    return await NativeReactNativeImageToWebp.convertImageToWebP(finalOptions);
+    return await (signal
+      ? Promise.race([nativePromise, abortPromise(signal)])
+      : nativePromise);
   } catch (error) {
-    // Map native errors to our error types
     if (error instanceof Error) {
-      const message = error.message;
-      if (message.includes('FILE_NOT_FOUND')) {
-        throw new ImageToWebPError(
-          ERROR_CODES.FILE_NOT_FOUND,
-          `File not found: ${options.inputPath}`
-        );
-      }
-      if (message.includes('DECODE_FAILED')) {
-        throw new ImageToWebPError(
-          ERROR_CODES.DECODE_FAILED,
-          `Failed to decode image: ${message}`
-        );
-      }
-      if (message.includes('ENCODE_FAILED')) {
-        throw new ImageToWebPError(
-          ERROR_CODES.ENCODE_FAILED,
-          `Failed to encode WebP: ${message}`
-        );
-      }
-      if (message.includes('IO_ERROR')) {
-        throw new ImageToWebPError(
-          ERROR_CODES.IO_ERROR,
-          `I/O error: ${message}`
-        );
-      }
-      if (message.includes('UNSUPPORTED_FORMAT')) {
-        throw new ImageToWebPError(
-          ERROR_CODES.UNSUPPORTED_FORMAT,
-          `Unsupported image format: ${message}`
-        );
-      }
-      if (message.includes('INVALID_INPUT')) {
-        throw new ImageToWebPError(
-          ERROR_CODES.INVALID_INPUT,
-          `Invalid input: ${message}`
-        );
-      }
+      if (error.name === 'AbortError') throw error;
+      throw mapNativeError(error, options.inputPath);
     }
     throw error;
   }
+}
+
+function abortPromise(signal: AbortSignal): Promise<never> {
+  return new Promise((_, reject) => {
+    if (signal.aborted) {
+      reject(makeAbortError(signal));
+      return;
+    }
+    signal.addEventListener('abort', () => reject(makeAbortError(signal)), {
+      once: true,
+    });
+  });
+}
+
+function makeAbortError(signal: AbortSignal): Error {
+  const reason = (signal as AbortSignal & { reason?: unknown }).reason;
+  if (reason instanceof Error) return reason;
+  const err = new Error('Conversion aborted');
+  err.name = 'AbortError';
+  return err;
 }
 
 export { ERROR_CODES };

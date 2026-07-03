@@ -75,6 +75,33 @@ const result = await convertImageToWebP({
 
 ---
 
+## 🔗 Input Sources
+
+`inputPath` accepts the URIs that modern image pickers hand you directly — you
+no longer need to copy files into app storage first:
+
+| Scheme              | Platform | Typical source                                                        |
+| ------------------- | -------- | --------------------------------------------------------------------- |
+| `file://` / raw path | iOS & Android | `react-native-image-picker`, `expo-image-picker`              |
+| `content://`        | Android  | Scoped storage (Android 10+), the Android 13+ system Photo Picker     |
+| `ph://`             | iOS      | CameraRoll / `expo-media-library` PhotoKit asset identifiers          |
+
+```tsx
+// Straight from react-native-image-picker — no manual file handling:
+const { assets } = await launchImageLibrary({ mediaType: 'photo' });
+const result = await convertImageToWebP({ inputPath: assets[0].uri });
+```
+
+When the input is a `content://` or `ph://` URI (which has no writable parent
+directory), the converted `.webp` is written to the app cache / temporary
+directory unless you pass an explicit `outputPath`.
+
+> **iOS `ph://` note:** resolving PhotoKit assets requires photo library access.
+> Add an `NSPhotoLibraryUsageDescription` entry to your `Info.plist` and ensure
+> the user has granted permission (your picker normally handles this).
+
+---
+
 ## 🎨 Presets & Benchmarks
 
 The following benchmarks were run natively on an Android Emulator using an original 4K image (4017 x 2683, ~1.96 MB). Note that Github may resize or compress the embedded images below.
