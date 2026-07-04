@@ -1,0 +1,36 @@
+# Observability: a slow full-resolution conversion must surface live progress
+# (progress bar + "phase percent%" text driven by native onConversionProgress
+# events) while running, then settle into a complete stats panel.
+appId: dynlabs.reactnativeimagetowebp.example
+name: 03-progress-observability
+tags:
+  - full
+---
+- launchApp:
+    clearState: true
+- runFlow: ../subflows/load-sample.yaml
+- tapOn:
+    id: 'preset-document'
+# Progress UI must appear while the conversion runs
+- extendedWaitUntil:
+    visible:
+      id: 'progress-container'
+    timeout: 10000
+- assertVisible:
+    id: 'progress-text'
+# ...and disappear once it settles
+- extendedWaitUntil:
+    notVisible:
+      id: 'progress-container'
+    timeout: 240000
+# Full stats panel from the enriched ConvertResult
+- assertVisible:
+    id: 'result-saved'
+- assertVisible:
+    id: 'result-duration'
+- assertVisible:
+    id: 'result-size'
+- assertVisible:
+    id: 'result-dimensions'
+- assertNotVisible:
+    id: 'error-text'

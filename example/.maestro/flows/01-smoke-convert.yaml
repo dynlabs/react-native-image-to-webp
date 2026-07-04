@@ -1,0 +1,31 @@
+# Smoke test: zero-config conversion with the default (balanced) preset.
+# Verifies the conversion completes, reports savings/duration, renders the
+# output WebP, and applies the 2048px default resize to the 4K sample.
+appId: dynlabs.reactnativeimagetowebp.example
+name: 01-smoke-convert
+tags:
+  - smoke
+---
+- launchApp:
+    clearState: true
+- runFlow: ../subflows/load-sample.yaml
+- tapOn:
+    id: 'preset-balanced'
+- extendedWaitUntil:
+    visible:
+      id: 'result-container'
+    timeout: 120000
+- assertVisible:
+    id: 'result-saved'
+- assertVisible:
+    text: 'Saved .*%.*'
+- assertVisible:
+    text: 'in \d+ ms'
+- assertVisible:
+    id: 'result-image'
+# balanced defaults to maxLongEdge 2048, so the 4017px-wide sample must
+# come out with a 2048px long edge
+- assertVisible:
+    text: 'Dim: 2048x.*'
+- assertNotVisible:
+    id: 'error-text'

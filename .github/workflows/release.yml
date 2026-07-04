@@ -101,19 +101,21 @@ jobs:
             echo 'RELEASE_NOTES_EOF'
           } >> $GITHUB_OUTPUT
 
-      - name: Create git tag
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "v$VERSION" -m "Release v$VERSION"
-          git push origin "v$VERSION"
-
       - name: Publish to npm
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
           NPM_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
+
+      # Tag only after a successful publish, and force-update so a re-run
+      # after a failed publish doesn't trip over a stale tag
+      - name: Create git tag
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -fa "v$VERSION" -m "Release v$VERSION"
+          git push -f origin "v$VERSION"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

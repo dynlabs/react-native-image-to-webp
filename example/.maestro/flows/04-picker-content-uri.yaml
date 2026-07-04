@@ -1,0 +1,57 @@
+# Opt-in (tag: picker): exercises the real image-picker path — the sample is
+# pushed into the device gallery with addMedia, picked through the system
+# photo picker, and converted from the resulting content:// (Android) or
+# ph:// (iOS) URI. System picker UIs vary by OS version, so this flow is
+# excluded from the default run; run it with `yarn e2e:picker`.
+appId: dynlabs.reactnativeimagetowebp.example
+name: 04-picker-content-uri
+tags:
+  - picker
+---
+- launchApp:
+    clearState: true
+    permissions:
+      photos: allow
+      medialibrary: allow
+- addMedia:
+    - '../../../samples/input-4k.jpg'
+- tapOn:
+    id: 'select-image-button'
+
+# Android system photo picker
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - extendedWaitUntil:
+          visible:
+            id: '.*icon_thumbnail.*'
+          timeout: 20000
+      - tapOn:
+          id: '.*icon_thumbnail.*'
+          index: 0
+
+# iOS photo library sheet (tap the first photo in the grid)
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - waitForAnimationToEnd:
+          timeout: 10000
+      - tapOn:
+          point: '25%,30%'
+
+- extendedWaitUntil:
+    visible:
+      id: 'preset-balanced'
+    timeout: 20000
+- tapOn:
+    id: 'preset-balanced'
+- extendedWaitUntil:
+    visible:
+      id: 'result-saved'
+    timeout: 120000
+- assertVisible:
+    text: 'Saved .*%.*'
+- assertNotVisible:
+    id: 'error-text'

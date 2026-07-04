@@ -82,6 +82,47 @@ You've successfully run and modified your React Native App. :partying_face:
 - If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
 - If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
 
+# End-to-end tests (Maestro)
+
+The example app doubles as the e2e test bed for
+`@dynlabs/react-native-image-to-webp` (v2.0.0, consumed from the workspace).
+Flows live in [`.maestro/`](./.maestro) and run against a real build of the
+app on a device, emulator or simulator.
+
+## Prerequisites
+
+- [Maestro](https://docs.maestro.dev/getting-started/installing-maestro)
+  **>= 2.6** (`curl -fsSL https://get.maestro.mobile.dev | bash`)
+- The app installed on a running emulator/simulator or connected device
+  (`yarn android` or `yarn ios` from this directory)
+
+## Running
+
+```sh
+yarn e2e          # all flows except the picker flow
+yarn e2e:smoke    # quick single-conversion smoke test
+yarn e2e:picker   # opt-in: system photo-picker flow (content:// / ph://)
+```
+
+## What the flows cover
+
+| Flow                        | Coverage                                                                                            |
+| --------------------------- | --------------------------------------------------------------------------------------------------- |
+| `01-smoke-convert`          | Zero-config conversion, savings/duration stats, output render, 2048px default resize                |
+| `02-all-presets`            | Every preset end-to-end; resize contract per preset (2048px vs original dimensions)                 |
+| `03-progress-observability` | Live progress UI driven by native progress events, full stats panel after completion                |
+| `04-picker-content-uri`     | Real picker path via `addMedia` + system photo picker (`content://` on Android, photo asset on iOS) |
+
+The flows load a deterministic 4K sample photo through a tiny `SampleImage`
+native fixture module (Android asset copy / iOS bundle resource) instead of
+the system picker, except for the opt-in picker flow. The `04` flow drives
+the OS photo-picker UI, which varies across OS versions — expect to adjust
+its selectors for your device image.
+
+In CI, the **E2E (Android)** workflow (`.github/workflows/e2e-android.yml`)
+builds a release APK and runs the suite on an emulator; trigger it from the
+GitHub Actions tab.
+
 # Troubleshooting
 
 If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.

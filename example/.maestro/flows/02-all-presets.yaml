@@ -1,0 +1,73 @@
+# Converts the sample with every preset and verifies each preset's contract:
+# balanced/small/fast resize to a 2048px long edge; lossless and document
+# keep the original 4017x2683 dimensions.
+appId: dynlabs.reactnativeimagetowebp.example
+name: 02-all-presets
+tags:
+  - full
+---
+- launchApp:
+    clearState: true
+- runFlow: ../subflows/load-sample.yaml
+
+# balanced
+- tapOn:
+    id: 'preset-balanced'
+- extendedWaitUntil:
+    notVisible:
+      id: 'progress-container'
+    timeout: 120000
+- assertVisible:
+    text: 'Dim: 2048x.*'
+- assertNotVisible:
+    id: 'error-text'
+
+# small
+- tapOn:
+    id: 'preset-small'
+- extendedWaitUntil:
+    notVisible:
+      id: 'progress-container'
+    timeout: 120000
+- assertVisible:
+    text: 'Dim: 2048x.*'
+- assertNotVisible:
+    id: 'error-text'
+
+# fast
+- tapOn:
+    id: 'preset-fast'
+- extendedWaitUntil:
+    notVisible:
+      id: 'progress-container'
+    timeout: 120000
+- assertVisible:
+    text: 'Dim: 2048x.*'
+- assertNotVisible:
+    id: 'error-text'
+
+# document keeps original dimensions
+- tapOn:
+    id: 'preset-document'
+- extendedWaitUntil:
+    notVisible:
+      id: 'progress-container'
+    timeout: 240000
+- assertVisible:
+    text: 'Dim: 4017x.*'
+- assertNotVisible:
+    id: 'error-text'
+
+# lossless keeps original dimensions (slowest: full-resolution lossless encode)
+- tapOn:
+    id: 'preset-lossless'
+- extendedWaitUntil:
+    notVisible:
+      id: 'progress-container'
+    timeout: 600000
+- assertVisible:
+    text: 'Dim: 4017x.*'
+- assertVisible:
+    text: 'Saved .*%.*'
+- assertNotVisible:
+    id: 'error-text'

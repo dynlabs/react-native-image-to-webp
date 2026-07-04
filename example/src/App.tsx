@@ -9,6 +9,7 @@ import {
   View,
   Image,
   ActivityIndicator,
+  NativeModules,
 } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import {
@@ -53,6 +54,19 @@ export default function App() {
     }
   };
 
+  // Loads the bundled sample photo via a tiny native fixture module, so the
+  // Maestro e2e suite can exercise the full pipeline without the system picker
+  const handleLoadSample = async () => {
+    try {
+      const path: string = await NativeModules.SampleImage.getSampleImagePath();
+      setInputImage(`file://${path}`);
+      setOriginalFileSize(null);
+      setOriginalDim(null);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const handleConvert = async (preset: ConvertPreset) => {
     if (!inputImage) return;
     try {
@@ -71,10 +85,22 @@ export default function App() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.title}>WebP Converter</Text>
 
-        <TouchableOpacity style={styles.button} onPress={handleSelectImage}>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={handleSelectImage}
+          testID="select-image-button"
+        >
           <Text style={styles.buttonText}>
             {inputImage ? 'Change Image' : 'Select Image'}
           </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={handleLoadSample}
+          testID="load-sample-button"
+        >
+          <Text style={styles.secondaryButtonText}>Use Sample Image</Text>
         </TouchableOpacity>
 
         {inputImage && (
@@ -114,6 +140,7 @@ export default function App() {
                   style={[styles.presetButton, isConverting && styles.disabled]}
                   onPress={() => handleConvert(p)}
                   disabled={isConverting}
+                  testID={`preset-${p}`}
                 >
                   <Text style={styles.presetText}>{p}</Text>
                 </TouchableOpacity>
@@ -123,7 +150,7 @@ export default function App() {
         )}
 
         {isConverting && (
-          <View style={styles.progressContainer}>
+          <View style={styles.progressContainer} testID="progress-container">
             <ActivityIndicator size="small" color="#007AFF" />
             <View style={styles.progressTrack}>
               <View
@@ -133,14 +160,14 @@ export default function App() {
                 ]}
               />
             </View>
-            <Text style={styles.progressText}>
+            <Text style={styles.progressText} testID="progress-text">
               {progress ? `${progress.phase} ${progress.percent}%` : '…'}
             </Text>
           </View>
         )}
 
         {result && (
-          <View style={styles.resultContainer}>
+          <View style={styles.resultContainer} testID="result-container">
             <Text style={styles.label}>WebP Result:</Text>
             <Image
               source={{
@@ -149,28 +176,33 @@ export default function App() {
                   : `file://${result.outputPath}`,
               }}
               style={styles.image}
+              testID="result-image"
             />
             <View style={styles.stats}>
-              <Text style={styles.statText}>
+              <Text style={styles.statText} testID="result-size">
                 Size: {(result.sizeBytes / 1024).toFixed(1)} KB
               </Text>
-              <Text style={styles.statText}>
+              <Text style={styles.statText} testID="result-dimensions">
                 Dim: {result.width}x{result.height}
               </Text>
             </View>
             <View style={styles.stats}>
-              <Text style={styles.statHighlight}>
+              <Text style={styles.statHighlight} testID="result-saved">
                 Saved {result.savedPercent.toFixed(1)}% (
                 {(result.savedBytes / 1024).toFixed(1)} KB)
               </Text>
-              <Text style={styles.statText}>
+              <Text style={styles.statText} testID="result-duration">
                 in {result.durationMs.toFixed(0)} ms
               </Text>
             </View>
           </View>
         )}
 
-        {error && <Text style={styles.errorText}>Error: {error.message}</Text>}
+        {error && (
+          <Text style={styles.errorText} testID="error-text">
+            Error: {error.message}
+          </Text>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -195,6 +227,16 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   buttonText: { color: '#FFF', fontSize: 18, fontWeight: '600' },
+  secondaryButton: {
+    borderColor: '#007AFF',
+    borderWidth: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginTop: -18,
+    marginBottom: 30,
+  },
+  secondaryButtonText: { color: '#007AFF', fontSize: 15, fontWeight: '600' },
   previewContainer: { width: '100%', marginBottom: 30 },
   label: { fontSize: 16, fontWeight: '600', color: '#666', marginBottom: 10 },
   image: {

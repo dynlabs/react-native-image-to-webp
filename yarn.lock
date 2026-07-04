@@ -3207,6 +3207,7 @@ __metadata:
     "@babel/core": "npm:^7.25.2"
     "@babel/preset-env": "npm:^7.25.3"
     "@babel/runtime": "npm:^7.25.0"
+    "@dynlabs/react-native-image-to-webp": "workspace:^2.0.0"
     "@react-native-community/cli": "npm:20.0.0"
     "@react-native-community/cli-platform-android": "npm:20.0.0"
     "@react-native-community/cli-platform-ios": "npm:20.0.0"
@@ -3222,7 +3223,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@dynlabs/react-native-image-to-webp@workspace:.":
+"@dynlabs/react-native-image-to-webp@workspace:., @dynlabs/react-native-image-to-webp@workspace:^2.0.0":
   version: 0.0.0-use.local
   resolution: "@dynlabs/react-native-image-to-webp@workspace:."
   dependencies:

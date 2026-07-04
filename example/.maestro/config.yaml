@@ -1,0 +1,14 @@
+# Maestro workspace config — requires Maestro >= 2.6 (https://docs.maestro.dev)
+#
+# Run from example/:
+#   yarn e2e          all flows except the picker flow
+#   yarn e2e:smoke    quick single-conversion smoke test
+#   yarn e2e:picker   opt-in system photo-picker flow (see 04-picker-content-uri)
+flows:
+  - 'flows/*.yaml'
+executionOrder:
+  continueOnFailure: true
+  flowsOrder:
+    - 01-smoke-convert
+    - 02-all-presets
+    - 03-progress-observability

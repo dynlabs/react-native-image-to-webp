@@ -1,0 +1,14 @@
+# Shared setup: load the bundled 4K sample photo (4017x2683 JPEG) through the
+# SampleImage native fixture, bypassing the system picker for determinism.
+appId: dynlabs.reactnativeimagetowebp.example
+---
+- extendedWaitUntil:
+    visible:
+      id: 'load-sample-button'
+    timeout: 30000
+- tapOn:
+    id: 'load-sample-button'
+- extendedWaitUntil:
+    visible:
+      id: 'preset-balanced'
+    timeout: 15000
