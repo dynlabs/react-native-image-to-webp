@@ -95,19 +95,24 @@ class ReactNativeImageToWebpModule(reactContext: ReactApplicationContext) :
     options: ReadableMap,
     promise: Promise
   ) {
-    executor.execute {
-      try {
-        promise.resolve(convertImageToWebPInternal(options))
-      } catch (e: Exception) {
-        val code = when (e) {
-          is ConversionException -> e.code
-          is FileNotFoundException -> ERROR_CODE_FILE_NOT_FOUND
-          is IllegalArgumentException -> ERROR_CODE_INVALID_INPUT
-          is java.io.IOException -> ERROR_CODE_IO_ERROR
-          else -> ERROR_CODE_DECODE_FAILED
+    try {
+      executor.execute {
+        try {
+          promise.resolve(convertImageToWebPInternal(options))
+        } catch (e: Exception) {
+          val code = when (e) {
+            is ConversionException -> e.code
+            is FileNotFoundException -> ERROR_CODE_FILE_NOT_FOUND
+            is IllegalArgumentException -> ERROR_CODE_INVALID_INPUT
+            is java.io.IOException -> ERROR_CODE_IO_ERROR
+            else -> ERROR_CODE_DECODE_FAILED
+          }
+          promise.reject(code, e.message ?: "Unknown error", e)
         }
-        promise.reject(code, e.message ?: "Unknown error", e)
       }
+    } catch (e: java.util.concurrent.RejectedExecutionException) {
+      // Module invalidated (host teardown / reload) while a call was in flight
+      promise.reject(ERROR_CODE_IO_ERROR, "Module is shutting down", e)
     }
   }
 
@@ -442,7 +447,7 @@ class ReactNativeImageToWebpModule(reactContext: ReactApplicationContext) :
   }
 
   /**
-   * Extract the raw EXIF payload (without the "Exif  " identifier)
+   * Extract the raw EXIF payload (without the "Exif\u0000\u0000" identifier)
    * from a JPEG stream. Returns null for non-JPEG inputs or JPEGs without
    * EXIF data.
    */
