@@ -27,6 +27,8 @@ npm install @dynlabs/react-native-image-to-webp
 yarn add @dynlabs/react-native-image-to-webp
 ```
 
+> **Upgrading from 1.x?** A few defaults changed (default resize, output location). See the [migration guide](MIGRATION.md).
+
 ### iOS Setup
 
 ```bash
@@ -119,7 +121,7 @@ The following benchmarks were run natively on an Android Emulator using an origi
 
 > ⚠️ **Note on `lossless`**: Lossless WebP mathematically guarantees bit-for-bit recreation without throwing away any data. While extremely efficient for PNGs, passing a lossy format like a JPEG into the `lossless` preset will frequently result in an output file that is significantly larger than the original input.
 
-> The benchmarks above were measured without resizing. Since v1.1.0 the `balanced`, `small` and `fast` presets resize to a 2048px long edge by default, so real-world savings are even larger. Pass `maxLongEdge: 0` to keep original dimensions.
+> The benchmarks above were measured without resizing. Since v2.0.0 the `balanced`, `small` and `fast` presets resize to a 2048px long edge by default, so real-world savings are even larger. Pass `maxLongEdge: 0` to keep original dimensions.
 
 ---
 

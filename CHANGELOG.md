@@ -5,13 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.0] - 2026-07-04
+## [2.0.0] - 2026-07-04
+
+See [MIGRATION.md](MIGRATION.md) for a step-by-step upgrade guide.
+
+### Breaking Changes
+
+- **Default output location**: when `outputPath` is omitted, output goes to a uniquely named file in the app cache directory instead of `<input dir>/<name>.webp` (which was often read-only and could overwrite files). Pass `outputPath` explicitly to keep the old location
+- **Default resize**: `balanced`, `small` and `fast` presets now resize to a 2048px long edge by default. Pass `maxLongEdge: 0` to keep original dimensions
+- **Unsupported formats** now reject with `DECODE_FAILED`; `UNSUPPORTED_FORMAT` is reserved and no longer emitted
+- **`lossless` preset** now also sets `exact: true` (preserves RGB in transparent areas)
+- **Alpha correctness**: semi-transparent pixels are no longer encoded premultiplied, so outputs are not byte-identical to 1.x for images with alpha
+- **Requires React Native >= 0.76** (codegen event emitters); a full native rebuild is required (`pod install`, Gradle sync) — this release is not OTA-updatable
 
 ### Added
 
 - **Zero-config inputs**: `content://` URIs (Android) and `ph://` photo-library URIs (iOS) are now resolved natively, so image-picker results work directly
-- **Safe default output**: when `outputPath` is omitted, output goes to a uniquely named file in the app cache directory instead of next to the source (which was often read-only and could overwrite files)
-- **Preset resize defaults**: `balanced`, `small` and `fast` now default to `maxLongEdge: 2048`; pass `maxLongEdge: 0` to keep original dimensions
 - **Progress events**: `onProgress` callback (backed by libwebp's native progress hook) and a `progress` value on `useImageConverter`
 - **Richer results**: `originalWidth`, `originalHeight`, `originalSizeBytes`, `savedBytes`, `savedPercent` and `durationMs` on every `ConvertResult`
 - **Debug logging**: `setDebugLogging(true)` or per-call `debug: true` logs effective options and a native decode/encode timing breakdown
@@ -19,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Jest mock**: `@dynlabs/react-native-image-to-webp/jest` for painless app testing
 - Unit tests for validation, preset resolution and the conversion pipeline
 - `threadLevel` and `exact` exposed as (advanced) options; `document` preset documented
+- Migration guide (MIGRATION.md) for upgrading from 1.x
 
 ### Changed
 

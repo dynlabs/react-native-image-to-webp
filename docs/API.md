@@ -133,7 +133,7 @@ Globally enables verbose logging for every conversion: effective options and the
 
 ## Presets
 
-Presets provide sensible defaults for common use cases. You can override individual parameters. Since v1.1.0 every preset resolves **all** encoder options on the JS side (single source of truth), including the default resize.
+Presets provide sensible defaults for common use cases. You can override individual parameters. Since v2.0.0 every preset resolves **all** encoder options on the JS side (single source of truth), including the default resize.
 
 | Preset       | quality | method | lossless | exact | maxLongEdge | Use for                                     |
 | ------------ | ------- | ------ | -------- | ----- | ----------- | ------------------------------------------- |
