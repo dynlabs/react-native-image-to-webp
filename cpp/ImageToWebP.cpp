@@ -166,8 +166,7 @@ WebPEncodeResult encodeWebP(
   const uint8_t* outputData = writer.mem;
   size_t outputSize = writer.size;
   std::vector<uint8_t> muxedData;
-  if (!options.stripMetadata && options.exifData != nullptr &&
-      options.exifSize > 0) {
+  if (options.exifData != nullptr && options.exifSize > 0) {
     if (addExifChunk(writer.mem, writer.size, options.exifData,
                      options.exifSize, muxedData)) {
       outputData = muxedData.data();
@@ -181,6 +180,7 @@ WebPEncodeResult encodeWebP(
     WebPMemoryWriterClear(&writer);
     WebPPictureFree(&picture);
     result.success = false;
+    result.ioError = true;
     result.errorMessage = "Failed to open output file for writing";
     return result;
   }
@@ -191,6 +191,7 @@ WebPEncodeResult encodeWebP(
     WebPMemoryWriterClear(&writer);
     WebPPictureFree(&picture);
     result.success = false;
+    result.ioError = true;
     result.errorMessage = "Failed to write WebP data to file";
     return result;
   }
@@ -313,7 +314,9 @@ void resetExifOrientationTag(uint8_t* exif, size_t size) {
   }
 
   const uint32_t ifdOffset = read32(4);
-  if (ifdOffset + 2 > size) {
+  // 64-bit arithmetic: a crafted offset near UINT32_MAX must not wrap past
+  // the bounds check (size_t is 32-bit on armeabi-v7a)
+  if (static_cast<uint64_t>(ifdOffset) + 2 > size) {
     return;
   }
 

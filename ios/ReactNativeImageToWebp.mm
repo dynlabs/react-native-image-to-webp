@@ -238,12 +238,17 @@ static NSString *deriveOutputPath(NSString *inputPath) {
       double maxPixelSize = maxLongEdge > 0
           ? maxLongEdge
           : (double)MAX(originalWidth, originalHeight);
-      NSDictionary *thumbnailOptions = @{
+      NSMutableDictionary *thumbnailOptions = [@{
         (__bridge NSString *)kCGImageSourceCreateThumbnailFromImageAlways : @YES,
         (__bridge NSString *)kCGImageSourceCreateThumbnailWithTransform : @YES,
         (__bridge NSString *)kCGImageSourceShouldCacheImmediately : @YES,
-        (__bridge NSString *)kCGImageSourceThumbnailMaxPixelSize : @(maxPixelSize),
-      };
+      } mutableCopy];
+      if (maxPixelSize > 0) {
+        // Some atypical files report no pixel dimensions; a 0 max size would
+        // make CreateThumbnailAtIndex fail, so omit the cap in that case
+        thumbnailOptions[(__bridge NSString *)kCGImageSourceThumbnailMaxPixelSize] =
+            @(maxPixelSize);
+      }
       CGImageRef image = CGImageSourceCreateThumbnailAtIndex(
           source, 0, (__bridge CFDictionaryRef)thumbnailOptions);
       CFRelease(source);
@@ -263,6 +268,11 @@ static NSString *deriveOutputPath(NSString *inputPath) {
       // CoreGraphics only draws premultiplied; WebP expects straight alpha
       if (hasAlpha) {
         unpremultiplyRGBA(rgbaData, (size_t)width * height);
+      }
+      if (originalWidth == 0 || originalHeight == 0) {
+        // Properties lacked pixel dimensions; fall back to the decoded size
+        originalWidth = width;
+        originalHeight = height;
       }
       CFTimeInterval decodeMs = (CACurrentMediaTime() - decodeStart) * 1000.0;
       sendProgress(25, @"decode");
@@ -292,7 +302,6 @@ static NSString *deriveOutputPath(NSString *inputPath) {
       encodeOptions.lossless = lossless;
       encodeOptions.exact = exact;
       encodeOptions.threadLevel = threadLevel;
-      encodeOptions.stripMetadata = exif.empty();
       encodeOptions.exifData = exif.empty() ? nullptr : exif.data();
       encodeOptions.exifSize = exif.size();
 
@@ -311,9 +320,7 @@ static NSString *deriveOutputPath(NSString *inputPath) {
 
       if (!result.success) {
         NSString *errorMessage = [NSString stringWithUTF8String:result.errorMessage.c_str()];
-        NSString *code = [errorMessage containsString:@"output file"]
-            ? kErrorCodeIOError
-            : kErrorCodeEncodeFailed;
+        NSString *code = result.ioError ? kErrorCodeIOError : kErrorCodeEncodeFailed;
         reject(code, [NSString stringWithFormat:@"WebP encoding failed: %@", errorMessage], nil);
         return;
       }

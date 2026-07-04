@@ -44,7 +44,13 @@ function normalizeInputPath(inputPath: string): string {
   // file:// URIs become plain paths; content:// (Android) and ph:// (iOS)
   // are resolved natively and must be passed through untouched.
   if (inputPath.startsWith('file://')) {
-    return decodeURIComponent(inputPath.replace(/^file:\/\//, ''));
+    const path = inputPath.replace(/^file:\/\//, '');
+    try {
+      return decodeURIComponent(path);
+    } catch {
+      // Not percent-encoded (e.g. a literal '%' in the filename)
+      return path;
+    }
   }
   return inputPath;
 }
@@ -115,14 +121,18 @@ export async function convertImageToWebP(
     const nativeResult: NativeConvertResult =
       await NativeReactNativeImageToWebp.convertImageToWebP(nativeOptions);
 
-    const savedBytes = nativeResult.originalSizeBytes - nativeResult.sizeBytes;
+    // Some content providers cannot report a source size (reported as 0);
+    // savings are unknowable then, not negative
+    const sizeKnown = nativeResult.originalSizeBytes > 0;
+    const savedBytes = sizeKnown
+      ? nativeResult.originalSizeBytes - nativeResult.sizeBytes
+      : 0;
     const result: ConvertResult = {
       ...nativeResult,
       savedBytes,
-      savedPercent:
-        nativeResult.originalSizeBytes > 0
-          ? (savedBytes / nativeResult.originalSizeBytes) * 100
-          : 0,
+      savedPercent: sizeKnown
+        ? (savedBytes / nativeResult.originalSizeBytes) * 100
+        : 0,
     };
 
     if (debug) {

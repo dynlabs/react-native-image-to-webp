@@ -118,7 +118,11 @@ class ReactNativeImageToWebpModule(reactContext: ReactApplicationContext) :
     // layer always sends fully resolved values
     val rawInputPath = options.getString("inputPath")
       ?: throw ConversionException(ERROR_CODE_INVALID_INPUT, "inputPath is required")
-    val inputPath = rawInputPath.removePrefix("file://")
+    // JS normalizes file:// URIs already; decode here too for direct native
+    // callers so both platforms treat file:// the same way
+    val inputPath = rawInputPath.removePrefix("file://").let {
+      if (it.contains('%') && !it.startsWith("content://")) Uri.decode(it) else it
+    }
     val maxLongEdge = if (options.hasKey("maxLongEdge")) options.getDouble("maxLongEdge").toInt() else 0
     val quality = if (options.hasKey("quality")) options.getInt("quality") else 80
     val method = if (options.hasKey("method")) options.getInt("method") else 3
@@ -184,9 +188,18 @@ class ReactNativeImageToWebpModule(reactContext: ReactApplicationContext) :
     val width = bitmap.width
     val height = bitmap.height
 
+    val pixelBytes = width.toLong() * height.toLong() * 4L
+    if (pixelBytes > Int.MAX_VALUE) {
+      bitmap.recycle()
+      throw ConversionException(
+        ERROR_CODE_INVALID_INPUT,
+        "Decoded image is too large (${width}x$height); set maxLongEdge to resize"
+      )
+    }
+
     // ARGB_8888 pixels are RGBA in memory: one bulk copy instead of a
     // per-pixel repack. Alpha is premultiplied; native code undoes that.
-    val buffer = ByteBuffer.allocateDirect(width * height * 4)
+    val buffer = ByteBuffer.allocateDirect(pixelBytes.toInt())
     bitmap.copyPixelsToBuffer(buffer)
     val premultiplied = bitmap.hasAlpha() && bitmap.isPremultiplied
     bitmap.recycle()
@@ -229,8 +242,10 @@ class ReactNativeImageToWebpModule(reactContext: ReactApplicationContext) :
     val encodeMs = SystemClock.elapsedRealtime() - encodeStart
 
     if (errorMessage != null) {
-      val code = if (errorMessage.contains("output file")) ERROR_CODE_IO_ERROR else ERROR_CODE_ENCODE_FAILED
-      throw ConversionException(code, "WebP encoding failed: $errorMessage")
+      // JNI tags failures with a stable "IO:"/"ENC:" prefix
+      val code = if (errorMessage.startsWith("IO:")) ERROR_CODE_IO_ERROR else ERROR_CODE_ENCODE_FAILED
+      val message = errorMessage.removePrefix("IO:").removePrefix("ENC:")
+      throw ConversionException(code, "WebP encoding failed: $message")
     }
 
     sendProgress(100, "done")
@@ -389,7 +404,16 @@ class ReactNativeImageToWebpModule(reactContext: ReactApplicationContext) :
       }
     }
 
-    return DecodedImage(bitmap, originalWidth, originalHeight)
+    // Report user-facing dimensions: transposing orientations swap the axes
+    val transposed = orientation == ExifInterface.ORIENTATION_TRANSPOSE ||
+      orientation == ExifInterface.ORIENTATION_ROTATE_90 ||
+      orientation == ExifInterface.ORIENTATION_TRANSVERSE ||
+      orientation == ExifInterface.ORIENTATION_ROTATE_270
+    return if (transposed) {
+      DecodedImage(bitmap, originalHeight, originalWidth)
+    } else {
+      DecodedImage(bitmap, originalWidth, originalHeight)
+    }
   }
 
   private fun applyExifOrientation(bitmap: Bitmap, orientation: Int): Bitmap {

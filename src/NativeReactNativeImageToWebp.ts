@@ -18,6 +18,7 @@ export type ConvertPreset =
 export interface NativeConvertOptions {
   inputPath: string;
   outputPath?: string;
+  /** Diagnostic only — native must not read this; JS resolves all defaults. */
   preset?: string;
   maxLongEdge?: number;
   quality?: number;
@@ -49,7 +50,7 @@ export interface ConversionProgressEvent {
   conversionId: number;
   /** Overall progress, 0-100. */
   progress: number;
-  /** Current phase: 'decode' | 'encode' | 'write' | 'done'. */
+  /** Current phase: 'decode' | 'encode' | 'done'. */
   phase: string;
 }
 

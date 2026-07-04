@@ -3,7 +3,7 @@ import type {
   NativeConvertResult,
 } from './NativeReactNativeImageToWebp';
 
-export type ConversionPhase = 'decode' | 'encode' | 'write' | 'done';
+export type ConversionPhase = 'decode' | 'encode' | 'done';
 
 export interface ConversionProgress {
   /** Overall progress, 0-100. */

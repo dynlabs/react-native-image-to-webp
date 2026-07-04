@@ -60,7 +60,7 @@ type ConvertOptions = {
 
 type ConversionProgress = {
   percent: number; // 0-100
-  phase: 'decode' | 'encode' | 'write' | 'done';
+  phase: 'decode' | 'encode' | 'done';
 };
 ```
 
@@ -109,7 +109,7 @@ type ConvertResult = {
 - **`DECODE_FAILED`**: Failed to decode the input image
 - **`ENCODE_FAILED`**: Failed to encode WebP
 - **`IO_ERROR`**: File I/O error (e.g., cannot write output file)
-- **`UNSUPPORTED_FORMAT`**: Input image format is not supported
+- **`UNSUPPORTED_FORMAT`**: Reserved. Unsupported formats currently surface as `DECODE_FAILED`
 
 ### `useImageConverter(): UseImageConverterResult`
 
@@ -259,7 +259,7 @@ import {
 - HEIF (API 28+)
 - GIF (first frame)
 
-**Note**: Format support depends on the platform's native decoders. Unsupported formats will throw `UNSUPPORTED_FORMAT` or `DECODE_FAILED`.
+**Note**: Format support depends on the platform's native decoders. Unsupported formats throw `DECODE_FAILED`.
 
 ## Platform-Specific Notes
 

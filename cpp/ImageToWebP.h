@@ -16,11 +16,11 @@ struct WebPEncodeOptions {
   int quality = 80;
   int method = 3;
   bool lossless = false;
-  bool stripMetadata = true;
   int threadLevel = 1;
   bool exact = false;
-  // Raw EXIF payload (TIFF header first, no "Exif\0\0" prefix) to embed in
-  // the output when stripMetadata is false. Not owned; must outlive the call.
+  // Raw EXIF payload (TIFF header first, no "Exif\0\0" prefix). When set,
+  // it is embedded in the output container; leave null to strip metadata.
+  // Not owned; must outlive the call.
   const uint8_t* exifData = nullptr;
   size_t exifSize = 0;
 };
@@ -28,6 +28,9 @@ struct WebPEncodeOptions {
 struct WebPEncodeResult {
   bool success = false;
   std::string errorMessage;
+  // True when the failure was writing the output file (disk full,
+  // permissions) rather than encoding itself.
+  bool ioError = false;
   uint32_t width = 0;
   uint32_t height = 0;
   size_t sizeBytes = 0;

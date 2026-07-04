@@ -13,7 +13,8 @@ extern "C" {
  *   (Android Bitmap pixels are premultiplied when the image has alpha)
  * @param exifData Raw EXIF payload to embed, or null to strip metadata
  * @param progressCallback Object with an onProgress(int) method, or null
- * @return null on success, otherwise a human-readable error message
+ * @return null on success, otherwise "IO:<message>" for output-file failures
+ *   or "ENC:<message>" for encoding failures
  */
 JNIEXPORT jstring JNICALL
 Java_com_dynlabs_reactnativeimagetowebp_ReactNativeImageToWebpModule_nativeEncodeWebP(
@@ -37,12 +38,12 @@ Java_com_dynlabs_reactnativeimagetowebp_ReactNativeImageToWebpModule_nativeEncod
   const jlong expectedLength =
       static_cast<jlong>(width) * static_cast<jlong>(height) * 4;
   if (data == nullptr || dataLength < expectedLength) {
-    return env->NewStringUTF("Invalid RGBA buffer");
+    return env->NewStringUTF("ENC:Invalid RGBA buffer");
   }
 
   const char *pathStr = env->GetStringUTFChars(outputPath, nullptr);
   if (pathStr == nullptr) {
-    return env->NewStringUTF("Invalid output path");
+    return env->NewStringUTF("ENC:Invalid output path");
   }
   std::string outputPathStr(pathStr);
   env->ReleaseStringUTFChars(outputPath, pathStr);
@@ -71,7 +72,6 @@ Java_com_dynlabs_reactnativeimagetowebp_ReactNativeImageToWebpModule_nativeEncod
   options.lossless = (lossless == JNI_TRUE);
   options.exact = (exact == JNI_TRUE);
   options.threadLevel = threadLevel;
-  options.stripMetadata = exif.empty();
   options.exifData = exif.empty() ? nullptr : exif.data();
   options.exifSize = exif.size();
 
@@ -104,7 +104,9 @@ Java_com_dynlabs_reactnativeimagetowebp_ReactNativeImageToWebpModule_nativeEncod
   if (result.success) {
     return nullptr;
   }
-  return env->NewStringUTF(result.errorMessage.c_str());
+  const std::string tagged =
+      (result.ioError ? "IO:" : "ENC:") + result.errorMessage;
+  return env->NewStringUTF(tagged.c_str());
 }
 
 } // extern "C"
