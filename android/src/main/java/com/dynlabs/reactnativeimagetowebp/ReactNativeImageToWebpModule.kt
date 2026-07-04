@@ -1,25 +1,57 @@
 package com.dynlabs.reactnativeimagetowebp
 
+import android.content.res.AssetFileDescriptor
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
+import android.graphics.Matrix
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
+import android.util.Log
+import androidx.exifinterface.media.ExifInterface
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.WritableMap
+import java.io.BufferedInputStream
+import java.io.DataInputStream
 import java.io.File
 import java.io.FileNotFoundException
-import java.io.FileOutputStream
+import java.io.InputStream
+import java.nio.ByteBuffer
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.roundToInt
 
 class ReactNativeImageToWebpModule(reactContext: ReactApplicationContext) :
   NativeReactNativeImageToWebpSpec(reactContext) {
 
-  private val executor: ExecutorService = Executors.newSingleThreadExecutor()
+  // Small pool so batch conversions run in parallel while leaving headroom
+  // for the UI and JS threads
+  private val executor: ExecutorService = Executors.newFixedThreadPool(
+    max(1, min(4, Runtime.getRuntime().availableProcessors() - 1))
+  )
+
+  fun interface WebPProgressListener {
+    fun onProgress(percent: Int)
+  }
+
+  private class ConversionException(
+    val code: String,
+    message: String,
+    cause: Throwable? = null,
+  ) : Exception(message, cause)
+
+  private data class DecodedImage(
+    val bitmap: Bitmap,
+    val originalWidth: Int,
+    val originalHeight: Int,
+  )
 
   companion object {
     init {
@@ -27,27 +59,37 @@ class ReactNativeImageToWebpModule(reactContext: ReactApplicationContext) :
     }
 
     const val NAME = NativeReactNativeImageToWebpSpec.NAME
+    private const val TAG = "ImageToWebP"
 
     private const val ERROR_CODE_INVALID_INPUT = "INVALID_INPUT"
     private const val ERROR_CODE_FILE_NOT_FOUND = "FILE_NOT_FOUND"
     private const val ERROR_CODE_DECODE_FAILED = "DECODE_FAILED"
     private const val ERROR_CODE_ENCODE_FAILED = "ENCODE_FAILED"
     private const val ERROR_CODE_IO_ERROR = "IO_ERROR"
-    private const val ERROR_CODE_UNSUPPORTED_FORMAT = "UNSUPPORTED_FORMAT"
+
+    private val uniqueSuffix = AtomicLong(0)
   }
 
-  // Native JNI methods
+  // Returns null on success, otherwise an error message
   private external fun nativeEncodeWebP(
-    rgbaData: ByteArray,
+    rgbaBuffer: ByteBuffer,
     width: Int,
     height: Int,
     quality: Int,
     method: Int,
     lossless: Boolean,
-    outputPath: String
-  ): Boolean
+    exact: Boolean,
+    threadLevel: Int,
+    premultiplied: Boolean,
+    exifData: ByteArray?,
+    outputPath: String,
+    progressCallback: WebPProgressListener?,
+  ): String?
 
-  private external fun nativeGetLastError(): String
+  override fun invalidate() {
+    super.invalidate()
+    executor.shutdown()
+  }
 
   override fun convertImageToWebP(
     options: ReadableMap,
@@ -55,242 +97,385 @@ class ReactNativeImageToWebpModule(reactContext: ReactApplicationContext) :
   ) {
     executor.execute {
       try {
-        val result = convertImageToWebPInternal(options)
-        promise.resolve(result)
+        promise.resolve(convertImageToWebPInternal(options))
       } catch (e: Exception) {
-        promise.reject(
-          when (e) {
-            is FileNotFoundException -> ERROR_CODE_FILE_NOT_FOUND
-            is IllegalArgumentException -> ERROR_CODE_INVALID_INPUT
-            is UnsupportedOperationException -> ERROR_CODE_UNSUPPORTED_FORMAT
-            else -> ERROR_CODE_DECODE_FAILED
-          },
-          e.message ?: "Unknown error",
-          e
-        )
+        val code = when (e) {
+          is ConversionException -> e.code
+          is FileNotFoundException -> ERROR_CODE_FILE_NOT_FOUND
+          is IllegalArgumentException -> ERROR_CODE_INVALID_INPUT
+          is java.io.IOException -> ERROR_CODE_IO_ERROR
+          else -> ERROR_CODE_DECODE_FAILED
+        }
+        promise.reject(code, e.message ?: "Unknown error", e)
       }
     }
   }
 
   private fun convertImageToWebPInternal(options: ReadableMap): WritableMap {
-    // Parse options
-    val inputPath = options.getString("inputPath")
-      ?: throw IllegalArgumentException("inputPath is required")
+    val startTime = SystemClock.elapsedRealtime()
 
-    val preset = options.getString("preset") ?: "balanced"
-    val outputPath = options.getString("outputPath")
-      ?: deriveOutputPath(inputPath, preset)
-
-    val maxLongEdge = if (options.hasKey("maxLongEdge")) {
-      options.getDouble("maxLongEdge").toInt()
-    } else {
-      null
-    }
-
-    val quality = if (options.hasKey("quality")) {
-      options.getInt("quality")
-    } else {
-      80
-    }
-
-    val method = if (options.hasKey("method")) {
-      options.getInt("method")
-    } else {
-      3
-    }
-
+    // Parse options; defaults mirror the JS 'balanced' preset but the JS
+    // layer always sends fully resolved values
+    val rawInputPath = options.getString("inputPath")
+      ?: throw ConversionException(ERROR_CODE_INVALID_INPUT, "inputPath is required")
+    val inputPath = rawInputPath.removePrefix("file://")
+    val maxLongEdge = if (options.hasKey("maxLongEdge")) options.getDouble("maxLongEdge").toInt() else 0
+    val quality = if (options.hasKey("quality")) options.getInt("quality") else 80
+    val method = if (options.hasKey("method")) options.getInt("method") else 3
     val lossless = options.hasKey("lossless") && options.getBoolean("lossless")
+    val exact = options.hasKey("exact") && options.getBoolean("exact")
+    val threadLevel = if (options.hasKey("threadLevel")) options.getInt("threadLevel") else 1
+    val stripMetadata = !options.hasKey("stripMetadata") || options.getBoolean("stripMetadata")
+    val debug = options.hasKey("debug") && options.getBoolean("debug")
+    val emitProgress = options.hasKey("emitProgress") && options.getBoolean("emitProgress")
+    val conversionId = if (options.hasKey("conversionId")) options.getInt("conversionId") else -1
 
-    // Validate
-    if (maxLongEdge != null && maxLongEdge <= 0) {
-      throw IllegalArgumentException("maxLongEdge must be positive")
+    if (maxLongEdge < 0) {
+      throw ConversionException(ERROR_CODE_INVALID_INPUT, "maxLongEdge must not be negative")
     }
     if (quality < 0 || quality > 100) {
-      throw IllegalArgumentException("quality must be between 0 and 100")
+      throw ConversionException(ERROR_CODE_INVALID_INPUT, "quality must be between 0 and 100")
     }
     if (method < 0 || method > 6) {
-      throw IllegalArgumentException("method must be between 0 and 6")
+      throw ConversionException(ERROR_CODE_INVALID_INPUT, "method must be between 0 and 6")
     }
 
-    // Check input file
-    val inputFile = File(inputPath)
-    if (!inputFile.exists() || !inputFile.canRead()) {
-      throw FileNotFoundException("File not found: $inputPath")
+    var lastEmitted = -1
+    fun sendProgress(percent: Int, phase: String) {
+      if (!emitProgress || conversionId < 0) return
+      val clamped = percent.coerceIn(0, 100)
+      if (clamped == lastEmitted) return
+      lastEmitted = clamped
+      val event = Arguments.createMap().apply {
+        putInt("conversionId", conversionId)
+        putInt("progress", clamped)
+        putString("phase", phase)
+      }
+      emitOnConversionProgress(event)
     }
 
-    // Decode image
-    val bitmap = decodeImage(inputFile, maxLongEdge)
-      ?: throw RuntimeException("Failed to decode image")
+    val isContentUri = inputPath.startsWith("content://")
+    val contentUri = if (isContentUri) Uri.parse(inputPath) else null
+    val inputFile = if (isContentUri) null else File(inputPath)
+
+    if (inputFile != null && (!inputFile.exists() || !inputFile.canRead())) {
+      throw ConversionException(ERROR_CODE_FILE_NOT_FOUND, "File not found: $inputPath")
+    }
+
+    val originalSizeBytes = getOriginalSizeBytes(contentUri, inputFile)
+    val outputPath = options.getString("outputPath") ?: deriveOutputPath(inputPath)
+
+    sendProgress(0, "decode")
+
+    // Decode (rotated per EXIF, resized to maxLongEdge)
+    val decodeStart = SystemClock.elapsedRealtime()
+    val decoded = decodeImage(contentUri, inputFile, maxLongEdge)
+    val decodeMs = SystemClock.elapsedRealtime() - decodeStart
+    sendProgress(25, "decode")
+
+    var bitmap = decoded.bitmap
+    if (bitmap.config != Bitmap.Config.ARGB_8888) {
+      val converted = bitmap.copy(Bitmap.Config.ARGB_8888, false)
+        ?: throw ConversionException(ERROR_CODE_DECODE_FAILED, "Failed to convert bitmap to ARGB_8888")
+      bitmap.recycle()
+      bitmap = converted
+    }
 
     val width = bitmap.width
     val height = bitmap.height
 
-    // Convert bitmap to RGBA
-    val rgbaData = bitmapToRGBA(bitmap)
+    // ARGB_8888 pixels are RGBA in memory: one bulk copy instead of a
+    // per-pixel repack. Alpha is premultiplied; native code undoes that.
+    val buffer = ByteBuffer.allocateDirect(width * height * 4)
+    bitmap.copyPixelsToBuffer(buffer)
+    val premultiplied = bitmap.hasAlpha() && bitmap.isPremultiplied
     bitmap.recycle()
 
-    // Ensure output directory exists
+    // Optionally carry JPEG EXIF over into the WebP container
+    val exifData = if (!stripMetadata) {
+      try {
+        openInputStream(contentUri, inputFile)?.use { extractJpegExif(it) }
+      } catch (e: Exception) {
+        null // best effort: fall back to stripping
+      }
+    } else {
+      null
+    }
+
     val outputFile = File(outputPath)
     outputFile.parentFile?.mkdirs()
 
-    // Encode to WebP using native code
-    val success = nativeEncodeWebP(
-      rgbaData,
+    val encodeStart = SystemClock.elapsedRealtime()
+    val progressListener = if (emitProgress && conversionId >= 0) {
+      WebPProgressListener { percent -> sendProgress(25 + percent * 70 / 100, "encode") }
+    } else {
+      null
+    }
+
+    val errorMessage = nativeEncodeWebP(
+      buffer,
       width,
       height,
       quality,
       method,
       lossless,
-      outputPath
+      exact,
+      threadLevel,
+      premultiplied,
+      exifData,
+      outputPath,
+      progressListener,
     )
+    val encodeMs = SystemClock.elapsedRealtime() - encodeStart
 
-    if (!success) {
-      val errorMsg = nativeGetLastError()
-      throw RuntimeException("WebP encoding failed: $errorMsg")
+    if (errorMessage != null) {
+      val code = if (errorMessage.contains("output file")) ERROR_CODE_IO_ERROR else ERROR_CODE_ENCODE_FAILED
+      throw ConversionException(code, "WebP encoding failed: $errorMessage")
     }
 
-    // Get file size
-    val sizeBytes = outputFile.length()
+    sendProgress(100, "done")
 
-    // Return result
-    val result = Arguments.createMap()
-    result.putString("outputPath", outputPath)
-    result.putInt("width", width)
-    result.putInt("height", height)
-    result.putDouble("sizeBytes", sizeBytes.toDouble())
+    val durationMs = SystemClock.elapsedRealtime() - startTime
+    if (debug) {
+      Log.d(
+        TAG,
+        "converted $inputPath -> $outputPath: " +
+          "${decoded.originalWidth}x${decoded.originalHeight} ($originalSizeBytes B) -> " +
+          "${width}x$height (${outputFile.length()} B) " +
+          "[decode ${decodeMs}ms, encode ${encodeMs}ms, total ${durationMs}ms]"
+      )
+    }
 
-    return result
+    return Arguments.createMap().apply {
+      putString("outputPath", outputPath)
+      putInt("width", width)
+      putInt("height", height)
+      putDouble("sizeBytes", outputFile.length().toDouble())
+      putInt("originalWidth", decoded.originalWidth)
+      putInt("originalHeight", decoded.originalHeight)
+      putDouble("originalSizeBytes", originalSizeBytes.toDouble())
+      putDouble("durationMs", durationMs.toDouble())
+    }
   }
 
-  private fun decodeImage(file: File, maxLongEdge: Int?): Bitmap? {
+  private fun openInputStream(contentUri: Uri?, inputFile: File?): InputStream? {
+    return if (contentUri != null) {
+      reactApplicationContext.contentResolver.openInputStream(contentUri)
+    } else {
+      inputFile?.inputStream()
+    }
+  }
+
+  private fun getOriginalSizeBytes(contentUri: Uri?, inputFile: File?): Long {
+    if (inputFile != null) {
+      return inputFile.length()
+    }
+    if (contentUri != null) {
+      try {
+        reactApplicationContext.contentResolver
+          .openAssetFileDescriptor(contentUri, "r")?.use { descriptor ->
+            if (descriptor.length != AssetFileDescriptor.UNKNOWN_LENGTH) {
+              return descriptor.length
+            }
+          }
+      } catch (e: Exception) {
+        // fall through
+      }
+    }
+    return 0
+  }
+
+  private fun decodeImage(contentUri: Uri?, inputFile: File?, maxLongEdge: Int): DecodedImage {
     return try {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-        // Use ImageDecoder for modern Android
-        val source = ImageDecoder.createSource(file)
-        val decoder = ImageDecoder.decodeBitmap(source) { decoder, info, source ->
-          // Force software bitmap to avoid HARDWARE config which doesn't support getPixels()
-          decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE)
-          
-          // Apply sampling if maxLongEdge is specified
-          maxLongEdge?.let { maxEdge ->
-            val originalWidth = info.size.width
-            val originalHeight = info.size.height
-            val maxDimension = maxOf(originalWidth, originalHeight)
-            if (maxDimension > maxEdge) {
-              val sampleSize = (maxDimension / maxEdge).toInt().coerceAtLeast(1)
-              decoder.setTargetSampleSize(sampleSize)
-            }
-          }
-        }
-        
-        // Ensure bitmap is not hardware-accelerated and can be accessed
-        var bitmap = decoder
-        if (bitmap.config == Bitmap.Config.HARDWARE) {
-          // Convert hardware bitmap to software bitmap
-          val softwareBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
-          bitmap.recycle()
-          bitmap = softwareBitmap
-        }
-        
-        // Final resize if still needed (setTargetSampleSize is approximate)
-        maxLongEdge?.let { maxEdge ->
-          val currentMax = maxOf(bitmap.width, bitmap.height)
-          if (currentMax > maxEdge) {
-            val scale = maxEdge.toFloat() / currentMax
-            val newWidth = (bitmap.width * scale).toInt()
-            val newHeight = (bitmap.height * scale).toInt()
-            val resized = Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
-            if (resized != bitmap) {
-              bitmap.recycle()
-              bitmap = resized
-            }
-          }
-        }
-        
-        bitmap
+        decodeWithImageDecoder(contentUri, inputFile, maxLongEdge)
       } else {
-        // Fallback to BitmapFactory
-        val options = BitmapFactory.Options().apply {
-          inJustDecodeBounds = true
+        decodeWithBitmapFactory(contentUri, inputFile, maxLongEdge)
+      }
+    } catch (e: ConversionException) {
+      throw e
+    } catch (e: FileNotFoundException) {
+      throw ConversionException(ERROR_CODE_FILE_NOT_FOUND, "File not found: ${e.message}", e)
+    } catch (e: Exception) {
+      throw ConversionException(ERROR_CODE_DECODE_FAILED, "Failed to decode image: ${e.message}", e)
+    }
+  }
+
+  // API 28+: ImageDecoder decodes directly at the target size and applies
+  // EXIF orientation itself
+  private fun decodeWithImageDecoder(contentUri: Uri?, inputFile: File?, maxLongEdge: Int): DecodedImage {
+    val source = if (contentUri != null) {
+      ImageDecoder.createSource(reactApplicationContext.contentResolver, contentUri)
+    } else {
+      ImageDecoder.createSource(inputFile!!)
+    }
+
+    var originalWidth = 0
+    var originalHeight = 0
+    val bitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+      // Software bitmap: HARDWARE config does not support pixel access
+      decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+      originalWidth = info.size.width
+      originalHeight = info.size.height
+      if (maxLongEdge > 0) {
+        val maxDimension = max(originalWidth, originalHeight)
+        if (maxDimension > maxLongEdge) {
+          val scale = maxLongEdge.toFloat() / maxDimension
+          decoder.setTargetSize(
+            max(1, (originalWidth * scale).roundToInt()),
+            max(1, (originalHeight * scale).roundToInt()),
+          )
         }
-        BitmapFactory.decodeFile(file.absolutePath, options)
+      }
+    }
+    return DecodedImage(bitmap, originalWidth, originalHeight)
+  }
 
-        maxLongEdge?.let { maxEdge ->
-          val maxDimension = maxOf(options.outWidth, options.outHeight)
-          if (maxDimension > maxEdge) {
-            val sampleSize = (maxDimension / maxEdge).toInt().coerceAtLeast(1)
-            options.inSampleSize = sampleSize
-          }
+  // API 24-27: BitmapFactory with subsampling, then EXIF rotation and an
+  // exact final scale
+  private fun decodeWithBitmapFactory(contentUri: Uri?, inputFile: File?, maxLongEdge: Int): DecodedImage {
+    val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    openInputStream(contentUri, inputFile)?.use {
+      BitmapFactory.decodeStream(it, null, boundsOptions)
+    } ?: throw FileNotFoundException(contentUri?.toString() ?: inputFile?.path)
+
+    val originalWidth = boundsOptions.outWidth
+    val originalHeight = boundsOptions.outHeight
+    if (originalWidth <= 0 || originalHeight <= 0) {
+      throw ConversionException(ERROR_CODE_DECODE_FAILED, "Failed to read image dimensions")
+    }
+
+    val decodeOptions = BitmapFactory.Options().apply {
+      inPreferredConfig = Bitmap.Config.ARGB_8888
+      if (maxLongEdge > 0) {
+        val maxDimension = max(originalWidth, originalHeight)
+        if (maxDimension > maxLongEdge) {
+          inSampleSize = max(1, maxDimension / maxLongEdge)
         }
+      }
+    }
 
-        options.inJustDecodeBounds = false
-        options.inPreferredConfig = Bitmap.Config.ARGB_8888
+    var bitmap = openInputStream(contentUri, inputFile)?.use {
+      BitmapFactory.decodeStream(it, null, decodeOptions)
+    } ?: throw ConversionException(ERROR_CODE_DECODE_FAILED, "Failed to decode image")
 
-        var bitmap = BitmapFactory.decodeFile(file.absolutePath, options)
-          ?: return null
+    val orientation = try {
+      openInputStream(contentUri, inputFile)?.use {
+        ExifInterface(it).getAttributeInt(
+          ExifInterface.TAG_ORIENTATION,
+          ExifInterface.ORIENTATION_NORMAL,
+        )
+      } ?: ExifInterface.ORIENTATION_NORMAL
+    } catch (e: Exception) {
+      ExifInterface.ORIENTATION_NORMAL
+    }
+    bitmap = applyExifOrientation(bitmap, orientation)
 
-        // Ensure bitmap is not hardware-accelerated and can be accessed
-        if (bitmap.config == Bitmap.Config.HARDWARE) {
-          // Convert hardware bitmap to software bitmap
-          val softwareBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
+    // inSampleSize is a power of two, so a final exact scale may remain
+    if (maxLongEdge > 0) {
+      val currentMax = max(bitmap.width, bitmap.height)
+      if (currentMax > maxLongEdge) {
+        val scale = maxLongEdge.toFloat() / currentMax
+        val resized = Bitmap.createScaledBitmap(
+          bitmap,
+          max(1, (bitmap.width * scale).roundToInt()),
+          max(1, (bitmap.height * scale).roundToInt()),
+          true,
+        )
+        if (resized != bitmap) {
           bitmap.recycle()
-          bitmap = softwareBitmap
+          bitmap = resized
         }
+      }
+    }
 
-        // Apply EXIF orientation if needed
-        bitmap = applyExifOrientation(bitmap, file)
+    return DecodedImage(bitmap, originalWidth, originalHeight)
+  }
 
-        // Final resize if still needed (inSampleSize is approximate)
-        maxLongEdge?.let { maxEdge ->
-          val currentMax = maxOf(bitmap.width, bitmap.height)
-          if (currentMax > maxEdge) {
-            val scale = maxEdge.toFloat() / currentMax
-            val newWidth = (bitmap.width * scale).toInt()
-            val newHeight = (bitmap.height * scale).toInt()
-            val resized = Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
-            if (resized != bitmap) {
-              bitmap.recycle()
-              bitmap = resized
-            }
+  private fun applyExifOrientation(bitmap: Bitmap, orientation: Int): Bitmap {
+    val matrix = Matrix()
+    when (orientation) {
+      ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.preScale(-1f, 1f)
+      ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+      ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.preScale(1f, -1f)
+      ExifInterface.ORIENTATION_TRANSPOSE -> {
+        matrix.postRotate(90f)
+        matrix.preScale(-1f, 1f)
+      }
+      ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+      ExifInterface.ORIENTATION_TRANSVERSE -> {
+        matrix.postRotate(-90f)
+        matrix.preScale(-1f, 1f)
+      }
+      ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+      else -> return bitmap
+    }
+    val transformed = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    if (transformed != bitmap) {
+      bitmap.recycle()
+    }
+    return transformed
+  }
+
+  /**
+   * Extract the raw EXIF payload (without the "Exif  " identifier)
+   * from a JPEG stream. Returns null for non-JPEG inputs or JPEGs without
+   * EXIF data.
+   */
+  private fun extractJpegExif(stream: InputStream): ByteArray? {
+    try {
+      val input = DataInputStream(BufferedInputStream(stream))
+      if (input.read() != 0xFF || input.read() != 0xD8) {
+        return null // not a JPEG
+      }
+      while (true) {
+        var byte = input.read()
+        if (byte == -1) return null
+        if (byte != 0xFF) return null
+        var marker = input.read()
+        while (marker == 0xFF) marker = input.read()
+        if (marker == -1) return null
+        if (marker == 0xDA || marker == 0xD9) return null // image data reached
+        if (marker == 0x01 || marker in 0xD0..0xD7) continue // standalone marker
+        val lengthHigh = input.read()
+        val lengthLow = input.read()
+        if (lengthHigh == -1 || lengthLow == -1) return null
+        val payloadLength = ((lengthHigh shl 8) or lengthLow) - 2
+        if (payloadLength < 0) return null
+        if (marker == 0xE1 && payloadLength > 6) {
+          val payload = ByteArray(payloadLength)
+          input.readFully(payload)
+          val isExif = payload[0] == 'E'.code.toByte() &&
+            payload[1] == 'x'.code.toByte() &&
+            payload[2] == 'i'.code.toByte() &&
+            payload[3] == 'f'.code.toByte() &&
+            payload[4] == 0.toByte() &&
+            payload[5] == 0.toByte()
+          if (isExif) {
+            return payload.copyOfRange(6, payload.size)
+          }
+        } else {
+          var remaining = payloadLength
+          while (remaining > 0) {
+            val skipped = input.skipBytes(remaining)
+            if (skipped <= 0) return null
+            remaining -= skipped
           }
         }
-
-        bitmap
       }
     } catch (e: Exception) {
-      throw RuntimeException("Failed to decode image: ${e.message}", e)
+      return null
     }
   }
 
-  private fun applyExifOrientation(bitmap: Bitmap, file: File): Bitmap {
-    // Note: For full EXIF support, use ExifInterface
-    // For now, return bitmap as-is
-    // TODO: Implement EXIF orientation handling using android.media.ExifInterface
-    return bitmap
-  }
-
-  private fun bitmapToRGBA(bitmap: Bitmap): ByteArray {
-    val width = bitmap.width
-    val height = bitmap.height
-    val pixels = IntArray(width * height)
-    bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
-
-    val rgbaData = ByteArray(width * height * 4)
-    var index = 0
-    for (pixel in pixels) {
-      rgbaData[index++] = ((pixel shr 16) and 0xFF).toByte() // R
-      rgbaData[index++] = ((pixel shr 8) and 0xFF).toByte()  // G
-      rgbaData[index++] = (pixel and 0xFF).toByte()          // B
-      rgbaData[index++] = ((pixel shr 24) and 0xFF).toByte() // A
-    }
-
-    return rgbaData
-  }
-
-  private fun deriveOutputPath(inputPath: String, preset: String): String {
-    val inputFile = File(inputPath)
-    val directory = inputFile.parent
-    val filename = inputFile.nameWithoutExtension
-    return File(directory, "$filename.webp").absolutePath
+  // Default output: a uniquely named file in the cache directory, which is
+  // always writable and never collides with the source
+  private fun deriveOutputPath(inputPath: String): String {
+    val directory = File(reactApplicationContext.cacheDir, "webp")
+    directory.mkdirs()
+    val lastSegment = inputPath.substringAfterLast('/').substringBeforeLast('.')
+    val base = lastSegment.replace(Regex("[^A-Za-z0-9._-]"), "_").ifEmpty { "image" }
+    val unique = "${System.currentTimeMillis()}-${uniqueSuffix.incrementAndGet()}"
+    return File(directory, "$base-$unique.webp").absolutePath
   }
 }

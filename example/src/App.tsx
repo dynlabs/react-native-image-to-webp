@@ -13,10 +13,20 @@ import {
 import { launchImageLibrary } from 'react-native-image-picker';
 import {
   useImageConverter,
+  setDebugLogging,
   type ConvertPreset,
 } from '@dynlabs/react-native-image-to-webp';
 
-const PRESETS: ConvertPreset[] = ['balanced', 'small', 'fast', 'lossless'];
+// Log effective options and native timing breakdowns to the console
+setDebugLogging(__DEV__);
+
+const PRESETS: ConvertPreset[] = [
+  'balanced',
+  'small',
+  'fast',
+  'lossless',
+  'document',
+];
 
 export default function App() {
   const [inputImage, setInputImage] = useState<string | null>(null);
@@ -25,7 +35,8 @@ export default function App() {
     height: number;
   } | null>(null);
   const [originalFileSize, setOriginalFileSize] = useState<number | null>(null);
-  const { convert, isConverting, result, error } = useImageConverter();
+  const { convert, isConverting, progress, result, error } =
+    useImageConverter();
 
   const handleSelectImage = async () => {
     const response = await launchImageLibrary({
@@ -68,7 +79,9 @@ export default function App() {
 
         {inputImage && (
           <View style={styles.previewContainer}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <View
+              style={{ flexDirection: 'row', justifyContent: 'space-between' }}
+            >
               <Text style={styles.label}>
                 Original:{' '}
                 {originalDim?.width
@@ -110,11 +123,20 @@ export default function App() {
         )}
 
         {isConverting && (
-          <ActivityIndicator
-            style={styles.loader}
-            size="large"
-            color="#007AFF"
-          />
+          <View style={styles.progressContainer}>
+            <ActivityIndicator size="small" color="#007AFF" />
+            <View style={styles.progressTrack}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${progress?.percent ?? 0}%` },
+                ]}
+              />
+            </View>
+            <Text style={styles.progressText}>
+              {progress ? `${progress.phase} ${progress.percent}%` : '…'}
+            </Text>
+          </View>
         )}
 
         {result && (
@@ -134,6 +156,15 @@ export default function App() {
               </Text>
               <Text style={styles.statText}>
                 Dim: {result.width}x{result.height}
+              </Text>
+            </View>
+            <View style={styles.stats}>
+              <Text style={styles.statHighlight}>
+                Saved {result.savedPercent.toFixed(1)}% (
+                {(result.savedBytes / 1024).toFixed(1)} KB)
+              </Text>
+              <Text style={styles.statText}>
+                in {result.durationMs.toFixed(0)} ms
               </Text>
             </View>
           </View>
@@ -187,7 +218,26 @@ const styles = StyleSheet.create({
   },
   presetText: { color: '#FFF', fontWeight: '600', textTransform: 'capitalize' },
   disabled: { opacity: 0.5 },
-  loader: { marginVertical: 20 },
+  progressContainer: {
+    width: '100%',
+    marginVertical: 20,
+    alignItems: 'center',
+    gap: 8,
+  },
+  progressTrack: {
+    width: '100%',
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#E5E5EA',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
+    backgroundColor: '#007AFF',
+  },
+  progressText: { fontSize: 13, color: '#666', fontWeight: '500' },
+  statHighlight: { fontSize: 14, color: '#34C759', fontWeight: '700' },
   resultContainer: {
     width: '100%',
     padding: 20,

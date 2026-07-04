@@ -1,9 +1,68 @@
-import type {
-  ConvertOptions,
-  ConvertPreset,
-} from './NativeReactNativeImageToWebp';
+import type { ConvertPreset } from './NativeReactNativeImageToWebp';
 
-interface PresetConfig {
+export interface PresetConfig {
+  quality?: number;
+  method?: number;
+  lossless: boolean;
+  stripMetadata: boolean;
+  threadLevel: number;
+  exact: boolean;
+  /**
+   * Default resize applied when the caller does not pass `maxLongEdge`.
+   * `undefined` means "keep original dimensions".
+   */
+  maxLongEdge?: number;
+}
+
+export const PRESETS: Record<ConvertPreset, PresetConfig> = {
+  balanced: {
+    quality: 80,
+    method: 3,
+    lossless: false,
+    stripMetadata: true,
+    threadLevel: 1,
+    exact: false,
+    maxLongEdge: 2048,
+  },
+  small: {
+    quality: 74,
+    method: 5,
+    lossless: false,
+    stripMetadata: true,
+    threadLevel: 1,
+    exact: false,
+    maxLongEdge: 2048,
+  },
+  fast: {
+    quality: 78,
+    method: 1,
+    lossless: false,
+    stripMetadata: true,
+    threadLevel: 1,
+    exact: false,
+    maxLongEdge: 2048,
+  },
+  lossless: {
+    quality: 100,
+    method: 4,
+    lossless: true,
+    stripMetadata: true,
+    threadLevel: 1,
+    exact: true,
+  },
+  document: {
+    quality: 82,
+    method: 4,
+    lossless: false,
+    stripMetadata: true,
+    threadLevel: 1,
+    exact: true,
+  },
+};
+
+export interface ResolvableOptions {
+  preset?: ConvertPreset;
+  maxLongEdge?: number;
   quality?: number;
   method?: number;
   lossless?: boolean;
@@ -12,70 +71,31 @@ interface PresetConfig {
   exact?: boolean;
 }
 
-const PRESETS: Record<ConvertPreset, PresetConfig> = {
-  balanced: {
-    quality: 80,
-    method: 3,
-    lossless: false,
-    stripMetadata: true,
-    threadLevel: 1,
-  },
-  small: {
-    quality: 74,
-    method: 5,
-    lossless: false,
-    stripMetadata: true,
-    threadLevel: 1,
-  },
-  fast: {
-    quality: 78,
-    method: 1,
-    lossless: false,
-    stripMetadata: true,
-    threadLevel: 1,
-  },
-  lossless: {
-    lossless: true,
-    method: 4,
-    stripMetadata: true,
-  },
-  document: {
-    quality: 82,
-    method: 4,
-    lossless: false,
-    stripMetadata: true,
-    exact: true, // Will be set conditionally if alpha present
-  },
-};
+/**
+ * Merge a preset with explicit options. Explicit values always win; the
+ * preset only fills in what the caller left undefined. This is the single
+ * source of truth for defaults — native layers use exactly what they receive.
+ *
+ * Passing `maxLongEdge: 0` disables resizing even when the preset defines a
+ * default.
+ */
+export function resolveOptions<T extends ResolvableOptions>(
+  options: T
+): T & Required<ResolvableOptions> {
+  const preset: ConvertPreset = options.preset ?? 'balanced';
+  const config = PRESETS[preset];
 
-export function applyPreset(options: ConvertOptions): ConvertOptions {
-  const preset: ConvertPreset = options.preset || 'balanced';
-  const presetConfig = PRESETS[preset];
+  const maxLongEdge = options.maxLongEdge ?? config.maxLongEdge ?? 0;
 
-  const result: ConvertOptions = {
+  return {
     ...options,
-    preset, // Ensure preset is always included in result
+    preset,
+    maxLongEdge,
+    quality: options.quality ?? config.quality ?? 80,
+    method: options.method ?? config.method ?? 3,
+    lossless: options.lossless ?? config.lossless,
+    stripMetadata: options.stripMetadata ?? config.stripMetadata,
+    threadLevel: options.threadLevel ?? config.threadLevel,
+    exact: options.exact ?? config.exact,
   };
-
-  // Apply preset values only if not explicitly overridden
-  if (result.quality === undefined && presetConfig.quality !== undefined) {
-    result.quality = presetConfig.quality;
-  }
-  if (result.method === undefined && presetConfig.method !== undefined) {
-    result.method = presetConfig.method;
-  }
-  if (result.lossless === undefined && presetConfig.lossless !== undefined) {
-    result.lossless = presetConfig.lossless;
-  }
-  if (
-    result.stripMetadata === undefined &&
-    presetConfig.stripMetadata !== undefined
-  ) {
-    result.stripMetadata = presetConfig.stripMetadata;
-  }
-
-  // Note: threadLevel and exact are handled natively, not passed through JS API
-  // They are documented here for reference but applied in native code
-
-  return result;
 }

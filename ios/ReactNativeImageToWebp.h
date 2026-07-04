@@ -1,5 +1,6 @@
 #import <ReactNativeImageToWebpSpec/ReactNativeImageToWebpSpec.h>
 
-@interface ReactNativeImageToWebp : NSObject <NativeReactNativeImageToWebpSpec>
+@interface ReactNativeImageToWebp
+    : NativeReactNativeImageToWebpSpecBase <NativeReactNativeImageToWebpSpec>
 
 @end

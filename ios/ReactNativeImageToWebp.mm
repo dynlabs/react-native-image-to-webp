@@ -2,12 +2,12 @@
 #import <React/RCTUtils.h>
 #import <ImageIO/ImageIO.h>
 #import <CoreGraphics/CoreGraphics.h>
-#import <Accelerate/Accelerate.h>
 #import <Foundation/Foundation.h>
+#import <Photos/Photos.h>
+#import <QuartzCore/QuartzCore.h>
+#import <stdatomic.h>
+#import <vector>
 #import "ImageToWebP.h"
-
-// Error domain
-static NSString *const kErrorDomain = @"ReactNativeImageToWebp";
 
 // Error codes matching JS API
 static NSString *const kErrorCodeInvalidInput = @"INVALID_INPUT";
@@ -15,10 +15,6 @@ static NSString *const kErrorCodeFileNotFound = @"FILE_NOT_FOUND";
 static NSString *const kErrorCodeDecodeFailed = @"DECODE_FAILED";
 static NSString *const kErrorCodeEncodeFailed = @"ENCODE_FAILED";
 static NSString *const kErrorCodeIOError = @"IO_ERROR";
-static NSString *const kErrorCodeUnsupportedFormat = @"UNSUPPORTED_FORMAT";
-
-@interface ReactNativeImageToWebp ()
-@end
 
 @implementation ReactNativeImageToWebp
 
@@ -26,156 +22,39 @@ static NSString *const kErrorCodeUnsupportedFormat = @"UNSUPPORTED_FORMAT";
   return @"ReactNativeImageToWebp";
 }
 
-// Helper to get CGImageSource from file path
-static CGImageSourceRef createImageSource(NSString *path, NSError **error) {
-  NSURL *url = [NSURL fileURLWithPath:path];
-  if (!url) {
-    if (error) {
-      *error = [NSError errorWithDomain:kErrorDomain
-                                   code:1
-                               userInfo:@{NSLocalizedDescriptionKey: @"Invalid file path",
-                                          @"code": kErrorCodeInvalidInput}];
-    }
-    return NULL;
+// Fetch the raw bytes of a photo-library asset (ph://<localIdentifier>)
+static NSData *loadPhotoLibraryAssetData(NSString *phUri) {
+  NSString *localIdentifier = [phUri substringFromIndex:@"ph://".length];
+  PHFetchResult<PHAsset *> *fetchResult =
+      [PHAsset fetchAssetsWithLocalIdentifiers:@[ localIdentifier ] options:nil];
+  PHAsset *asset = fetchResult.firstObject;
+  if (asset == nil) {
+    return nil;
   }
 
-  CGImageSourceRef source = CGImageSourceCreateWithURL((__bridge CFURLRef)url, NULL);
-  if (!source) {
-    if (error) {
-      *error = [NSError errorWithDomain:kErrorDomain
-                                   code:1
-                               userInfo:@{NSLocalizedDescriptionKey: @"File not found or cannot be read",
-                                          @"code": kErrorCodeFileNotFound}];
-    }
-    return NULL;
-  }
+  PHImageRequestOptions *requestOptions = [PHImageRequestOptions new];
+  requestOptions.synchronous = YES;
+  requestOptions.networkAccessAllowed = YES;
+  requestOptions.version = PHImageRequestOptionsVersionCurrent;
+  requestOptions.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
 
-  return source;
+  __block NSData *assetData = nil;
+  [[PHImageManager defaultManager]
+      requestImageDataAndOrientationForAsset:asset
+                                     options:requestOptions
+                               resultHandler:^(NSData *imageData, NSString *dataUTI,
+                                               CGImagePropertyOrientation orientation,
+                                               NSDictionary *info) {
+                                 assetData = imageData;
+                               }];
+  return assetData;
 }
 
-// Get image properties including orientation
-static NSDictionary *getImageProperties(CGImageSourceRef source) {
-  return (__bridge_transfer NSDictionary *)CGImageSourceCopyPropertiesAtIndex(source, 0, NULL);
-}
-
-// Apply EXIF orientation to get correctly oriented image
-static CGImageRef createOrientedImage(CGImageRef image, NSDictionary *properties) {
-  NSNumber *orientationValue = properties[(__bridge NSString *)kCGImagePropertyOrientation];
-  if (!orientationValue) {
-    return CGImageRetain(image);
-  }
-
-  int orientation = [orientationValue intValue];
-  if (orientation == 1) {
-    return CGImageRetain(image); // No rotation needed
-  }
-
-  // Calculate transform based on orientation
-  CGAffineTransform transform = CGAffineTransformIdentity;
-  CGFloat width = CGImageGetWidth(image);
-  CGFloat height = CGImageGetHeight(image);
-
-  switch (orientation) {
-    case 2: // Flip horizontal
-      transform = CGAffineTransformMakeScale(-1, 1);
-      transform = CGAffineTransformTranslate(transform, -width, 0);
-      break;
-    case 3: // Rotate 180
-      transform = CGAffineTransformMakeTranslation(width, height);
-      transform = CGAffineTransformRotate(transform, M_PI);
-      break;
-    case 4: // Flip vertical
-      transform = CGAffineTransformMakeScale(1, -1);
-      transform = CGAffineTransformTranslate(transform, 0, -height);
-      break;
-    case 5: // Rotate 90 CCW and flip
-      transform = CGAffineTransformMakeTranslation(height, 0);
-      transform = CGAffineTransformRotate(transform, M_PI_2);
-      transform = CGAffineTransformScale(transform, -1, 1);
-      break;
-    case 6: // Rotate 90 CW
-      transform = CGAffineTransformMakeTranslation(height, 0);
-      transform = CGAffineTransformRotate(transform, M_PI_2);
-      break;
-    case 7: // Rotate 90 CW and flip
-      transform = CGAffineTransformMakeTranslation(0, width);
-      transform = CGAffineTransformRotate(transform, -M_PI_2);
-      transform = CGAffineTransformScale(transform, -1, 1);
-      break;
-    case 8: // Rotate 90 CCW
-      transform = CGAffineTransformMakeTranslation(0, width);
-      transform = CGAffineTransformRotate(transform, -M_PI_2);
-      break;
-    default:
-      return CGImageRetain(image);
-  }
-
-  // Create bitmap context and draw transformed image
-  CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
-  CGContextRef context = CGBitmapContextCreate(NULL,
-                                               (orientation >= 5 && orientation <= 8) ? height : width,
-                                               (orientation >= 5 && orientation <= 8) ? width : height,
-                                               8, 0, colorSpace,
-                                               kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
-  CGColorSpaceRelease(colorSpace);
-
-  if (!context) {
-    return CGImageRetain(image);
-  }
-
-  CGContextConcatCTM(context, transform);
-  CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
-  CGImageRef orientedImage = CGBitmapContextCreateImage(context);
-  CGContextRelease(context);
-
-  return orientedImage ?: CGImageRetain(image);
-}
-
-// Resize image if maxLongEdge is specified
-static CGImageRef resizeImageIfNeeded(CGImageRef image, NSNumber *maxLongEdge) {
-  if (!maxLongEdge || [maxLongEdge doubleValue] <= 0) {
-    return CGImageRetain(image);
-  }
-
-  CGFloat width = CGImageGetWidth(image);
-  CGFloat height = CGImageGetHeight(image);
-  CGFloat maxEdge = [maxLongEdge doubleValue];
-  CGFloat currentMax = MAX(width, height);
-
-  if (currentMax <= maxEdge) {
-    return CGImageRetain(image);
-  }
-
-  CGFloat scale = maxEdge / currentMax;
-  CGFloat newWidth = width * scale;
-  CGFloat newHeight = height * scale;
-
-  CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
-  CGContextRef context = CGBitmapContextCreate(NULL,
-                                               (size_t)newWidth,
-                                               (size_t)newHeight,
-                                               8, 0, colorSpace,
-                                               kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
-  CGColorSpaceRelease(colorSpace);
-
-  if (!context) {
-    return CGImageRetain(image);
-  }
-
-  CGContextSetInterpolationQuality(context, kCGInterpolationHigh);
-  CGContextDrawImage(context, CGRectMake(0, 0, newWidth, newHeight), image);
-  CGImageRef resizedImage = CGBitmapContextCreateImage(context);
-  CGContextRelease(context);
-
-  return resizedImage ?: CGImageRetain(image);
-}
-
-// Convert CGImage to RGBA buffer
+// Convert CGImage to a premultiplied RGBA buffer
 static uint8_t *createRGBABuffer(CGImageRef image, uint32_t *outWidth, uint32_t *outHeight) {
   size_t width = CGImageGetWidth(image);
   size_t height = CGImageGetHeight(image);
-  size_t bytesPerPixel = 4;
-  size_t bytesPerRow = width * bytesPerPixel;
+  size_t bytesPerRow = width * 4;
   size_t bufferSize = bytesPerRow * height;
 
   uint8_t *buffer = (uint8_t *)malloc(bufferSize);
@@ -206,128 +85,258 @@ static uint8_t *createRGBABuffer(CGImageRef image, uint32_t *outWidth, uint32_t 
   return buffer;
 }
 
-// Derive output path from input path if not provided
-static NSString *deriveOutputPath(NSString *inputPath, NSString *outputPath, NSString *preset) {
-  if (outputPath && outputPath.length > 0) {
-    return outputPath;
-  }
-
-  NSString *directory = [inputPath stringByDeletingLastPathComponent];
-  NSString *filename = [[inputPath lastPathComponent] stringByDeletingPathExtension];
-  NSString *newFilename = [NSString stringWithFormat:@"%@.webp", filename];
-  return [directory stringByAppendingPathComponent:newFilename];
+static BOOL imageHasAlpha(CGImageRef image) {
+  CGImageAlphaInfo alphaInfo = CGImageGetAlphaInfo(image);
+  return alphaInfo != kCGImageAlphaNone &&
+         alphaInfo != kCGImageAlphaNoneSkipLast &&
+         alphaInfo != kCGImageAlphaNoneSkipFirst;
 }
 
-- (void)convertImageToWebP:(JS::NativeReactNativeImageToWebp::ConvertOptions &)options
+// Default output: a uniquely named file in the cache directory, which is
+// always writable and never collides with the source
+static NSString *deriveOutputPath(NSString *inputPath) {
+  static atomic_ulong uniqueSuffix = 0;
+
+  NSString *cachesDirectory =
+      NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject;
+  NSString *directory = [cachesDirectory stringByAppendingPathComponent:@"webp"];
+  [[NSFileManager defaultManager] createDirectoryAtPath:directory
+                            withIntermediateDirectories:YES
+                                             attributes:nil
+                                                  error:nil];
+
+  NSString *base = [[inputPath lastPathComponent] stringByDeletingPathExtension];
+  NSMutableCharacterSet *allowed = [NSMutableCharacterSet alphanumericCharacterSet];
+  [allowed addCharactersInString:@"._-"];
+  base = [[base componentsSeparatedByCharactersInSet:[allowed invertedSet]]
+      componentsJoinedByString:@"_"];
+  if (base.length == 0) {
+    base = @"image";
+  }
+
+  unsigned long suffix = atomic_fetch_add(&uniqueSuffix, 1) + 1;
+  NSString *filename =
+      [NSString stringWithFormat:@"%@-%lld-%lu.webp", base,
+                                 (long long)([NSDate date].timeIntervalSince1970 * 1000), suffix];
+  return [directory stringByAppendingPathComponent:filename];
+}
+
+- (void)convertImageToWebP:(JS::NativeReactNativeImageToWebp::NativeConvertOptions &)options
                    resolve:(RCTPromiseResolveBlock)resolve
                     reject:(RCTPromiseRejectBlock)reject {
+  // Copy option values out of the codegen struct before leaving the JS thread
+  NSString *rawInputPath = options.inputPath();
+  NSString *explicitOutputPath = options.outputPath();
+  double maxLongEdge = options.maxLongEdge().value_or(0);
+  int quality = (int)options.quality().value_or(80);
+  int method = (int)options.method().value_or(3);
+  BOOL lossless = options.lossless().value_or(false);
+  BOOL exact = options.exact().value_or(false);
+  int threadLevel = (int)options.threadLevel().value_or(1);
+  BOOL stripMetadata = options.stripMetadata().value_or(true);
+  BOOL debug = options.debug().value_or(false);
+  BOOL emitProgress = options.emitProgress().value_or(false);
+  double conversionId = options.conversionId().value_or(-1);
+
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
     @autoreleasepool {
-      NSError *error = nil;
+      CFTimeInterval startTime = CACurrentMediaTime();
 
-      // Parse options
-      NSString *inputPath = options.inputPath();
-      if (!inputPath || inputPath.length == 0) {
+      if (rawInputPath == nil || rawInputPath.length == 0) {
         reject(kErrorCodeInvalidInput, @"inputPath is required", nil);
         return;
       }
-
-      NSString *preset = options.preset() ?: @"balanced";
-      NSString *outputPath = deriveOutputPath(inputPath, options.outputPath(), preset);
-      NSNumber *maxLongEdge = options.maxLongEdge().has_value() ? @(options.maxLongEdge().value()) : nil;
-      NSNumber *quality = options.quality().has_value() ? @(options.quality().value()) : @80;
-      NSNumber *method = options.method().has_value() ? @(options.method().value()) : @3;
-      NSNumber *lossless = @(options.lossless().value_or(false));
-      NSNumber *stripMetadata = @(options.stripMetadata().value_or(true));
-
-      // Check if input file exists
-      if (![[NSFileManager defaultManager] fileExistsAtPath:inputPath]) {
-        reject(kErrorCodeFileNotFound, [NSString stringWithFormat:@"File not found: %@", inputPath], nil);
+      if (quality < 0 || quality > 100) {
+        reject(kErrorCodeInvalidInput, @"quality must be between 0 and 100", nil);
+        return;
+      }
+      if (method < 0 || method > 6) {
+        reject(kErrorCodeInvalidInput, @"method must be between 0 and 6", nil);
         return;
       }
 
-      // Create image source
-      CGImageSourceRef source = createImageSource(inputPath, &error);
+      __block NSInteger lastEmitted = -1;
+      void (^sendProgress)(NSInteger, NSString *) = ^(NSInteger percent, NSString *phase) {
+        if (!emitProgress || conversionId < 0) {
+          return;
+        }
+        NSInteger clamped = MIN(MAX(percent, (NSInteger)0), (NSInteger)100);
+        if (clamped == lastEmitted) {
+          return;
+        }
+        lastEmitted = clamped;
+        [self emitOnConversionProgress:@{
+          @"conversionId" : @(conversionId),
+          @"progress" : @(clamped),
+          @"phase" : phase,
+        }];
+      };
+
+      sendProgress(0, @"decode");
+
+      // Resolve the source into a CGImageSource. ph:// photo-library assets
+      // are loaded through PHImageManager; everything else is a file path.
+      NSString *inputPath = rawInputPath;
+      NSData *sourceData = nil; // raw bytes, kept for EXIF extraction
+      CGImageSourceRef source = NULL;
+      long long originalSizeBytes = 0;
+
+      if ([rawInputPath hasPrefix:@"ph://"]) {
+        sourceData = loadPhotoLibraryAssetData(rawInputPath);
+        if (sourceData == nil) {
+          reject(kErrorCodeFileNotFound,
+                 [NSString stringWithFormat:@"Photo library asset not found: %@", rawInputPath],
+                 nil);
+          return;
+        }
+        originalSizeBytes = (long long)sourceData.length;
+        source = CGImageSourceCreateWithData((__bridge CFDataRef)sourceData, NULL);
+      } else {
+        if ([inputPath hasPrefix:@"file://"]) {
+          inputPath = [[inputPath substringFromIndex:@"file://".length]
+              stringByRemovingPercentEncoding] ?: [inputPath substringFromIndex:@"file://".length];
+        }
+        if (![[NSFileManager defaultManager] fileExistsAtPath:inputPath]) {
+          reject(kErrorCodeFileNotFound,
+                 [NSString stringWithFormat:@"File not found: %@", inputPath], nil);
+          return;
+        }
+        NSDictionary *inputAttributes =
+            [[NSFileManager defaultManager] attributesOfItemAtPath:inputPath error:nil];
+        originalSizeBytes = [inputAttributes[NSFileSize] longLongValue];
+        NSURL *url = [NSURL fileURLWithPath:inputPath];
+        source = CGImageSourceCreateWithURL((__bridge CFURLRef)url, NULL);
+      }
+
       if (!source) {
-        reject(error.userInfo[@"code"] ?: kErrorCodeDecodeFailed,
-               error.localizedDescription ?: @"Failed to create image source",
-               error);
+        reject(kErrorCodeDecodeFailed, @"Failed to read image data", nil);
         return;
       }
 
-      // Get image properties
-      NSDictionary *properties = getImageProperties(source);
+      NSDictionary *properties =
+          (__bridge_transfer NSDictionary *)CGImageSourceCopyPropertiesAtIndex(source, 0, NULL);
       if (!properties) {
         CFRelease(source);
         reject(kErrorCodeDecodeFailed, @"Failed to read image properties", nil);
         return;
       }
 
-      // Create CGImage
-      CGImageRef image = CGImageSourceCreateImageAtIndex(source, 0, NULL);
+      uint32_t originalWidth = [properties[(__bridge NSString *)kCGImagePropertyPixelWidth] unsignedIntValue];
+      uint32_t originalHeight = [properties[(__bridge NSString *)kCGImagePropertyPixelHeight] unsignedIntValue];
+      // Report user-facing dimensions: EXIF orientations 5-8 swap the axes
+      int orientation = [properties[(__bridge NSString *)kCGImagePropertyOrientation] intValue];
+      if (orientation >= 5 && orientation <= 8) {
+        uint32_t tmp = originalWidth;
+        originalWidth = originalHeight;
+        originalHeight = tmp;
+      }
+
+      // Decode directly at the target size: far less memory and time than
+      // decoding full-size and drawing down, and the transform option bakes
+      // EXIF orientation into the pixels for free.
+      CFTimeInterval decodeStart = CACurrentMediaTime();
+      double maxPixelSize = maxLongEdge > 0
+          ? maxLongEdge
+          : (double)MAX(originalWidth, originalHeight);
+      NSDictionary *thumbnailOptions = @{
+        (__bridge NSString *)kCGImageSourceCreateThumbnailFromImageAlways : @YES,
+        (__bridge NSString *)kCGImageSourceCreateThumbnailWithTransform : @YES,
+        (__bridge NSString *)kCGImageSourceShouldCacheImmediately : @YES,
+        (__bridge NSString *)kCGImageSourceThumbnailMaxPixelSize : @(maxPixelSize),
+      };
+      CGImageRef image = CGImageSourceCreateThumbnailAtIndex(
+          source, 0, (__bridge CFDictionaryRef)thumbnailOptions);
       CFRelease(source);
       if (!image) {
         reject(kErrorCodeDecodeFailed, @"Failed to decode image", nil);
         return;
       }
 
-      // Apply orientation
-      CGImageRef orientedImage = createOrientedImage(image, properties);
-      CGImageRelease(image);
-      if (!orientedImage) {
-        reject(kErrorCodeDecodeFailed, @"Failed to apply orientation", nil);
-        return;
-      }
-
-      // Resize if needed
-      CGImageRef finalImage = resizeImageIfNeeded(orientedImage, maxLongEdge);
-      CGImageRelease(orientedImage);
-      if (!finalImage) {
-        reject(kErrorCodeDecodeFailed, @"Failed to resize image", nil);
-        return;
-      }
-
-      // Convert to RGBA buffer
+      BOOL hasAlpha = imageHasAlpha(image);
       uint32_t width, height;
-      uint8_t *rgbaData = createRGBABuffer(finalImage, &width, &height);
-      CGImageRelease(finalImage);
+      uint8_t *rgbaData = createRGBABuffer(image, &width, &height);
+      CGImageRelease(image);
       if (!rgbaData) {
         reject(kErrorCodeDecodeFailed, @"Failed to create RGBA buffer", nil);
         return;
       }
+      // CoreGraphics only draws premultiplied; WebP expects straight alpha
+      if (hasAlpha) {
+        unpremultiplyRGBA(rgbaData, (size_t)width * height);
+      }
+      CFTimeInterval decodeMs = (CACurrentMediaTime() - decodeStart) * 1000.0;
+      sendProgress(25, @"decode");
 
-      // Prepare WebP encoding options
+      // Optionally carry JPEG EXIF over into the WebP container
+      std::vector<uint8_t> exif;
+      if (!stripMetadata) {
+        if (sourceData == nil) {
+          sourceData = [NSData dataWithContentsOfFile:inputPath
+                                              options:NSDataReadingMappedIfSafe
+                                                error:nil];
+        }
+        if (sourceData != nil) {
+          exif = extractExifFromJpeg((const uint8_t *)sourceData.bytes, sourceData.length);
+          // Rotation is baked into the pixels now
+          resetExifOrientationTag(exif.data(), exif.size());
+        }
+      }
+
+      NSString *outputPath = (explicitOutputPath.length > 0)
+          ? explicitOutputPath
+          : deriveOutputPath(inputPath);
+
       WebPEncodeOptions encodeOptions;
-      encodeOptions.quality = [quality intValue];
-      encodeOptions.method = [method intValue];
-      encodeOptions.lossless = [lossless boolValue];
-      encodeOptions.stripMetadata = [stripMetadata boolValue];
-      encodeOptions.threadLevel = 1;
+      encodeOptions.quality = quality;
+      encodeOptions.method = method;
+      encodeOptions.lossless = lossless;
+      encodeOptions.exact = exact;
+      encodeOptions.threadLevel = threadLevel;
+      encodeOptions.stripMetadata = exif.empty();
+      encodeOptions.exifData = exif.empty() ? nullptr : exif.data();
+      encodeOptions.exifSize = exif.size();
 
-      // Encode to WebP
-      std::string outputPathStr = [outputPath UTF8String];
-      WebPEncodeResult result = encodeWebP(rgbaData, width, height, encodeOptions, outputPathStr);
+      WebPProgressFn progressFn = nullptr;
+      if (emitProgress && conversionId >= 0) {
+        progressFn = [sendProgress](int percent) {
+          sendProgress(25 + percent * 70 / 100, @"encode");
+        };
+      }
+
+      CFTimeInterval encodeStart = CACurrentMediaTime();
+      WebPEncodeResult result = encodeWebP(
+          rgbaData, width, height, encodeOptions, [outputPath UTF8String], progressFn);
       free(rgbaData);
+      CFTimeInterval encodeMs = (CACurrentMediaTime() - encodeStart) * 1000.0;
 
       if (!result.success) {
-        NSString *errorMsg = [NSString stringWithUTF8String:result.errorMessage.c_str()];
-        reject(kErrorCodeEncodeFailed, errorMsg, nil);
+        NSString *errorMessage = [NSString stringWithUTF8String:result.errorMessage.c_str()];
+        NSString *code = [errorMessage containsString:@"output file"]
+            ? kErrorCodeIOError
+            : kErrorCodeEncodeFailed;
+        reject(code, [NSString stringWithFormat:@"WebP encoding failed: %@", errorMessage], nil);
         return;
       }
 
-      // Get file size
-      NSDictionary *fileAttributes = [[NSFileManager defaultManager] attributesOfItemAtPath:outputPath error:&error];
-      NSNumber *fileSize = fileAttributes[NSFileSize];
-      if (!fileSize) {
-        fileSize = @0;
+      sendProgress(100, @"done");
+
+      double durationMs = (CACurrentMediaTime() - startTime) * 1000.0;
+      if (debug) {
+        NSLog(@"[ImageToWebP] converted %@ -> %@: %ux%u (%lld B) -> %ux%u (%zu B) "
+              @"[decode %.0fms, encode %.0fms, total %.0fms]",
+              rawInputPath, outputPath, originalWidth, originalHeight, originalSizeBytes,
+              width, height, result.sizeBytes, decodeMs, encodeMs, durationMs);
       }
 
-      // Return result
       resolve(@{
-        @"outputPath": outputPath,
-        @"width": @(result.width ?: width),
-        @"height": @(result.height ?: height),
-        @"sizeBytes": fileSize,
+        @"outputPath" : outputPath,
+        @"width" : @(width),
+        @"height" : @(height),
+        @"sizeBytes" : @(result.sizeBytes),
+        @"originalWidth" : @(originalWidth),
+        @"originalHeight" : @(originalHeight),
+        @"originalSizeBytes" : @(originalSizeBytes),
+        @"durationMs" : @(durationMs),
       });
     }
   });

@@ -16,8 +16,11 @@ Pod::Spec.new do |s|
   s.source_files = "ios/**/*.{h,m,mm,swift,cpp}", "cpp/**/*.{h,cpp}"
   s.private_header_files = "ios/**/*.h", "cpp/**/*.h"
 
+  s.frameworks = "Photos", "ImageIO", "CoreGraphics", "QuartzCore"
+
   # Use CocoaPods dependency for libwebp
-  # Note: libwebp pod is available up to version 1.5.0
+  # Note: libwebp pod is available up to version 1.5.0.
+  # The full pod (all subspecs) is required: mux backs EXIF-preserving output.
   s.dependency "libwebp", "~> 1.5"
   s.compiler_flags = "-O3 -DNDEBUG -DWEBP_AVAILABLE"
   s.pod_target_xcconfig = {

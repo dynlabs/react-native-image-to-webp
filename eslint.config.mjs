@@ -24,6 +24,12 @@ export default defineConfig([
     },
   },
   {
+    files: ['jest/**/*.js'],
+    languageOptions: {
+      globals: { jest: 'readonly' },
+    },
+  },
+  {
     ignores: ['node_modules/', 'lib/', 'website/'],
   },
 ]);

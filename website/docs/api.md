@@ -17,23 +17,23 @@ yarn add @dynlabs/react-native-image-to-webp
 
 ## Requirements
 
-- React Native >= 0.68
+- React Native >= 0.76
 - New Architecture (TurboModules) enabled
-- iOS 11.0+ / Android API 24+
+- iOS 13.0+ / Android API 24+
 
 ## Basic Usage
+
+Zero configuration — a single call is production-ready:
 
 ```typescript
 import { convertImageToWebP } from '@dynlabs/react-native-image-to-webp';
 
-const result = await convertImageToWebP({
-  inputPath: '/path/to/image.jpg',
-  preset: 'balanced',
-  maxLongEdge: 2048,
-});
+const result = await convertImageToWebP({ inputPath: asset.uri });
 
 console.log(`Output: ${result.outputPath}`);
-console.log(`Size: ${result.sizeBytes} bytes`);
+console.log(
+  `Saved ${result.savedPercent.toFixed(1)}% in ${result.durationMs}ms`
+);
 console.log(`Dimensions: ${result.width}×${result.height}`);
 ```
 
@@ -49,36 +49,59 @@ Converts an image file to WebP format.
 
 ```typescript
 type ConvertOptions = {
-  inputPath: string; // Required: Path to input image file
-  outputPath?: string; // Optional: Output path (default: inputPath with .webp extension)
-  preset?: ConvertPreset; // Optional: Preset name (default: 'balanced')
-  maxLongEdge?: number; // Optional: Maximum dimension for resize (preserves aspect ratio)
-  quality?: number; // Optional: Quality 0-100 (overrides preset)
-  method?: number; // Optional: Compression method 0-6 (overrides preset)
-  lossless?: boolean; // Optional: Use lossless encoding (overrides preset)
-  stripMetadata?: boolean; // Optional: Strip EXIF metadata (default: true)
+  inputPath: string; // Required: path or URI of the source image
+  outputPath?: string; // Optional: default is a unique file in the app cache dir
+  preset?: ConvertPreset; // Optional: preset name (default: 'balanced')
+  maxLongEdge?: number; // Optional: resize limit; 0 disables; default from preset
+  quality?: number; // Optional: quality 0-100 (overrides preset)
+  method?: number; // Optional: compression method 0-6 (overrides preset)
+  lossless?: boolean; // Optional: lossless encoding (overrides preset)
+  stripMetadata?: boolean; // Optional: strip metadata (default: true)
+  threadLevel?: number; // Optional: libwebp thread_level, 0 or 1 (overrides preset)
+  exact?: boolean; // Optional: preserve RGB in transparent areas (overrides preset)
+  debug?: boolean; // Optional: log a timing breakdown for this call
+  onProgress?: (progress: ConversionProgress) => void; // Optional: progress callback
+};
+
+type ConversionProgress = {
+  percent: number; // 0-100
+  phase: 'decode' | 'encode' | 'write' | 'done';
 };
 ```
 
 **Fields**:
 
-- **`inputPath`** (required): File system path to the input image. Must exist and be readable.
-- **`outputPath`** (optional): Path for the output WebP file. If omitted, derived from `inputPath` by replacing extension with `.webp`.
-- **`preset`** (optional): Preset configuration. See [Presets](#presets) below. Default: `'balanced'`.
-- **`maxLongEdge`** (optional): If provided, resizes the image so the longer edge (width or height) is at most this value. Aspect ratio is preserved. If omitted, original size is kept.
-- **`quality`** (optional): Quality setting 0-100. Higher = better quality, larger files. Overrides preset value if provided.
-- **`method`** (optional): Compression method 0-6. Higher = better compression, slower encoding. Overrides preset value if provided.
-- **`lossless`** (optional): Use lossless encoding. Overrides preset value if provided.
-- **`stripMetadata`** (optional): Strip EXIF metadata from output. Default: `true`. Set to `false` to preserve metadata (note: WebP format has limited metadata support).
+- **`inputPath`** (required): Path or URI of the source image. Supported forms:
+  - Plain file paths (`/data/user/0/.../photo.jpg`)
+  - `file://` URIs
+  - `content://` URIs on Android (image pickers, camera, Storage Access Framework)
+  - `ph://` photo-library URIs on iOS (requires photo-library access)
+- **`outputPath`** (optional): Destination for the WebP file. If omitted, a uniquely named file is created in the app cache directory (`<cache>/webp/<name>-<unique>.webp`), which is always writable and never overwrites existing files.
+- **`preset`** (optional): Preset configuration. See [Presets](#presets). Default: `'balanced'`.
+- **`maxLongEdge`** (optional): Resizes so the longer edge is at most this value; aspect ratio is preserved. Defaults to the preset value (2048 for `balanced`/`small`/`fast`, no resize for `lossless`/`document`). Pass `0` to keep original dimensions.
+- **`quality`** (optional): Quality 0-100. Higher = better quality, larger files.
+- **`method`** (optional): Compression method 0-6. Higher = better compression, slower encoding.
+- **`lossless`** (optional): Use lossless encoding.
+- **`stripMetadata`** (optional): Strip metadata from the output. Default: `true`. When `false`, EXIF from JPEG sources is embedded in the WebP container (with the orientation tag neutralized, since rotation is baked into the pixels).
+- **`threadLevel`** (optional): libwebp `thread_level` (0 or 1). Presets default to 1 (multi-threaded encoding).
+- **`exact`** (optional): Preserve RGB values in fully transparent areas.
+- **`debug`** (optional): Log the effective options and a native decode/encode timing breakdown for this call. See also [`setDebugLogging`](#setdebugloggingenabled-boolean-void).
+- **`onProgress`** (optional): Called with overall progress (0-100) and the current phase while the conversion runs.
 
 #### Returns
 
 ```typescript
 type ConvertResult = {
   outputPath: string; // Path to the created WebP file
-  width: number; // Image width in pixels
-  height: number; // Image height in pixels
+  width: number; // Output width in pixels
+  height: number; // Output height in pixels
   sizeBytes: number; // Output file size in bytes
+  originalWidth: number; // Source width in pixels
+  originalHeight: number; // Source height in pixels
+  originalSizeBytes: number; // Source file size in bytes
+  savedBytes: number; // originalSizeBytes - sizeBytes (can be negative)
+  savedPercent: number; // Percentage saved, e.g. 48.7
+  durationMs: number; // Total conversion time, measured natively
 };
 ```
 
@@ -93,182 +116,132 @@ type ConvertResult = {
 - **`IO_ERROR`**: File I/O error (e.g., cannot write output file)
 - **`UNSUPPORTED_FORMAT`**: Input image format is not supported
 
-#### Example
+### `useImageConverter(): UseImageConverterResult`
+
+React hook wrapping `convertImageToWebP` with state management:
 
 ```typescript
-import {
-  convertImageToWebP,
-  ImageToWebPError,
-  ERROR_CODES,
-} from '@dynlabs/react-native-image-to-webp';
-
-try {
-  const result = await convertImageToWebP({
-    inputPath: '/path/to/photo.jpg',
-    preset: 'balanced',
-    maxLongEdge: 2048,
-  });
-  console.log('Success:', result);
-} catch (error) {
-  if (error instanceof ImageToWebPError) {
-    if (error.code === ERROR_CODES.FILE_NOT_FOUND) {
-      console.error('File not found');
-    } else {
-      console.error('Conversion failed:', error.code, error.message);
-    }
-  }
-}
+const { convert, isConverting, progress, result, error, reset } =
+  useImageConverter();
 ```
+
+- **`convert(options)`**: runs a conversion; resolves/throws like `convertImageToWebP`
+- **`isConverting`**: whether a conversion is in flight
+- **`progress`**: `{ percent, phase }` of the running conversion, or `null` when idle
+- **`result`**: last successful `ConvertResult`
+- **`error`**: last error, or `null`
+- **`reset()`**: clears all state
+
+### `setDebugLogging(enabled: boolean): void`
+
+Globally enables verbose logging for every conversion: effective options and the final result on the JS console, plus a native decode/encode timing breakdown in logcat (`ImageToWebP` tag) / os_log. Equivalent to passing `debug: true` on each call.
 
 ## Presets
 
-Presets provide sensible defaults for common use cases. You can override individual parameters.
+Presets provide sensible defaults for common use cases. You can override individual parameters. Since v1.1.0 every preset resolves **all** encoder options on the JS side (single source of truth), including the default resize.
 
-### `balanced` (default)
+| Preset       | quality | method | lossless | exact | maxLongEdge | Use for                                     |
+| ------------ | ------- | ------ | -------- | ----- | ----------- | ------------------------------------------- |
+| `balanced` ✓ | 80      | 3      | no       | no    | 2048        | General-purpose, photos, most use cases     |
+| `small`      | 74      | 5      | no       | no    | 2048        | Bandwidth-critical uploads, thumbnails      |
+| `fast`       | 78      | 1      | no       | no    | 2048        | Batch processing, speed over size           |
+| `lossless`   | 100     | 4      | yes      | yes   | original    | Graphics with sharp edges, pixel-perfection |
+| `document`   | 82      | 4      | no       | yes   | original    | Scans, screenshots, text, transparency      |
 
-Good balance of quality and file size. Recommended for most images.
+All presets strip metadata and use `threadLevel: 1` by default.
 
-```typescript
-{
-  quality: 80,
-  method: 3,
-  lossless: false,
-  stripMetadata: true,
-}
-```
-
-**Use for**: General-purpose image conversion, photos, most use cases.
-
-### `small`
-
-Optimized for smaller file sizes. Slightly lower quality, higher compression.
+## Progress Observation
 
 ```typescript
-{
-  quality: 74,
-  method: 5,
-  lossless: false,
-  stripMetadata: true,
-}
+await convertImageToWebP({
+  inputPath: asset.uri,
+  onProgress: ({ percent, phase }) => {
+    // phase: 'decode' -> 'encode' -> 'done'
+    setProgressBar(percent);
+  },
+});
 ```
 
-**Use for**: When file size is critical, thumbnails, bandwidth-constrained scenarios.
-
-### `fast`
-
-Optimized for faster encoding. Lower compression method, slightly lower quality.
-
-```typescript
-{
-  quality: 78,
-  method: 1,
-  lossless: false,
-  stripMetadata: true,
-}
-```
-
-**Use for**: Batch processing, when encoding speed matters more than file size.
-
-### `lossless`
-
-Lossless encoding. Perfect quality, larger files.
-
-```typescript
-{
-  lossless: true,
-  method: 4,
-  stripMetadata: true,
-}
-```
-
-**Use for**: Graphics with sharp edges, documents, when quality is critical.
-
-### `document`
-
-Optimized for document images. Higher quality, handles alpha channel.
-
-```typescript
-{
-  quality: 82,
-  method: 4,
-  lossless: false,
-  stripMetadata: true,
-  exact: true, // Applied if alpha channel present
-}
-```
-
-**Use for**: Scanned documents, images with text, images with transparency.
+Progress events are emitted natively (libwebp's encoder progress hook), correlated per conversion, and automatically unsubscribed when the conversion settles.
 
 ## Examples
 
-### Basic Conversion
+### Zero-config conversion
 
 ```typescript
-const result = await convertImageToWebP({
-  inputPath: '/path/to/image.jpg',
-});
-// Output: /path/to/image.webp
+const result = await convertImageToWebP({ inputPath: asset.uri });
+// balanced preset, resized to 2048px long edge,
+// written to <cache>/webp/<name>-<unique>.webp
 ```
 
-### With Resize
+### From an image picker (Android content:// / iOS ph://)
 
 ```typescript
+const response = await launchImageLibrary({ mediaType: 'photo' });
 const result = await convertImageToWebP({
-  inputPath: '/path/to/large-image.jpg',
-  maxLongEdge: 2048, // Resize to max 2048px on longest edge
+  inputPath: response.assets[0].uri, // content://... or ph://... just work
 });
 ```
 
-### Custom Output Path
+### Keep original dimensions
 
 ```typescript
-const result = await convertImageToWebP({
+await convertImageToWebP({ inputPath, maxLongEdge: 0 });
+```
+
+### Custom output path
+
+```typescript
+await convertImageToWebP({
   inputPath: '/path/to/image.jpg',
   outputPath: '/path/to/output/custom.webp',
 });
 ```
 
-### Using Presets
-
-```typescript
-// Small file size
-await convertImageToWebP({
-  inputPath: '/path/to/image.jpg',
-  preset: 'small',
-});
-
-// Fast encoding
-await convertImageToWebP({
-  inputPath: '/path/to/image.jpg',
-  preset: 'fast',
-});
-
-// Lossless
-await convertImageToWebP({
-  inputPath: '/path/to/image.jpg',
-  preset: 'lossless',
-});
-```
-
-### Overriding Preset Values
+### Overriding preset values
 
 ```typescript
 await convertImageToWebP({
   inputPath: '/path/to/image.jpg',
   preset: 'balanced',
   quality: 90, // Override preset quality
-  maxLongEdge: 1024, // Add resize
+  maxLongEdge: 1024, // Override preset resize
 });
 ```
 
-### Custom Quality and Method
+### Preserve EXIF metadata (JPEG sources)
 
 ```typescript
 await convertImageToWebP({
-  inputPath: '/path/to/image.jpg',
-  quality: 85,
-  method: 4,
-  maxLongEdge: 2048,
+  inputPath: '/path/to/photo.jpg',
+  stripMetadata: false,
+});
+```
+
+## Testing with Jest
+
+TurboModules are unavailable in Jest. Add this to your Jest setup file:
+
+```js
+jest.mock('@dynlabs/react-native-image-to-webp', () =>
+  require('@dynlabs/react-native-image-to-webp/jest')
+);
+```
+
+The mock exports the full public API: `convertImageToWebP` is a `jest.fn()`
+resolving realistic results (and firing `onProgress`), `useImageConverter`
+works with real React state, and `buildMockResult(options)` helps craft
+custom resolved values:
+
+```typescript
+import {
+  convertImageToWebP,
+  buildMockResult,
+} from '@dynlabs/react-native-image-to-webp';
+
+(convertImageToWebP as jest.Mock).mockResolvedValueOnce({
+  ...buildMockResult(),
+  sizeBytes: 1,
 });
 ```
 
@@ -291,28 +264,27 @@ await convertImageToWebP({
 - HEIF (API 28+)
 - GIF (first frame)
 
-:::note
-
-Format support depends on the platform's native decoders. Unsupported formats will throw `UNSUPPORTED_FORMAT`.
-
-:::
+**Note**: Format support depends on the platform's native decoders. Unsupported formats will throw `UNSUPPORTED_FORMAT` or `DECODE_FAILED`.
 
 ## Platform-Specific Notes
 
 ### iOS
 
-- Uses `CGImageSource` (ImageIO) for decoding
+- Uses `CGImageSource` (ImageIO); images are decoded directly at the target size (`CGImageSourceCreateThumbnailAtIndex`) — far less memory for large photos
 - EXIF orientation is applied to pixel data (baked in)
-- Background queue execution
+- `ph://` assets are loaded via `PHImageManager` (photo-library permission required)
+- Runs on a concurrent background queue
 
 ### Android
 
-- Uses `ImageDecoder` (API 28+) or `BitmapFactory` (fallback)
-- EXIF orientation support (via ExifInterface)
-- Single-threaded executor for background processing
-- File paths: Supports `file://` URIs. `content://` URIs may have limitations (document in issues if encountered)
+- Uses `ImageDecoder` (API 28+, decodes at target size, handles orientation) or `BitmapFactory` + `ExifInterface` (API 24-27)
+- `content://` URIs are resolved through the `ContentResolver`
+- Pixel extraction uses a single `copyPixelsToBuffer` bulk copy (no per-pixel loops)
+- Conversions run on a small thread pool, so batches convert in parallel
 
 ## Error Handling
+
+Errors carry a stable `code` (also available on the `ImageToWebPError` class):
 
 ```typescript
 import {
@@ -353,5 +325,9 @@ import type {
   ConvertOptions,
   ConvertResult,
   ConvertPreset,
+  ConversionProgress,
+  ConversionPhase,
+  ErrorCode,
+  UseImageConverterResult,
 } from '@dynlabs/react-native-image-to-webp';
 ```

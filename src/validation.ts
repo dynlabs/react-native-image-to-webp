@@ -1,5 +1,6 @@
-import type { ConvertOptions } from './NativeReactNativeImageToWebp';
-import type { ErrorCode } from './index';
+import { PRESETS } from './presets';
+import type { ConvertOptions } from './types';
+import type { ErrorCode } from './errors';
 
 interface ValidationError {
   code: ErrorCode;
@@ -16,11 +17,33 @@ export function validateOptions(
     };
   }
 
-  if (options.maxLongEdge !== undefined) {
-    if (typeof options.maxLongEdge !== 'number' || options.maxLongEdge <= 0) {
+  if (options.outputPath !== undefined) {
+    if (typeof options.outputPath !== 'string' || options.outputPath === '') {
       return {
         code: 'INVALID_INPUT',
-        message: 'maxLongEdge must be a positive number',
+        message: 'outputPath must be a non-empty string',
+      };
+    }
+  }
+
+  if (options.preset !== undefined && !(options.preset in PRESETS)) {
+    return {
+      code: 'INVALID_INPUT',
+      message: `preset must be one of: ${Object.keys(PRESETS).join(', ')}`,
+    };
+  }
+
+  if (options.maxLongEdge !== undefined) {
+    // 0 is allowed and means "do not resize"
+    if (
+      typeof options.maxLongEdge !== 'number' ||
+      !Number.isFinite(options.maxLongEdge) ||
+      options.maxLongEdge < 0
+    ) {
+      return {
+        code: 'INVALID_INPUT',
+        message:
+          'maxLongEdge must be a non-negative number (0 disables resizing)',
       };
     }
   }
@@ -49,6 +72,25 @@ export function validateOptions(
         message: 'method must be a number between 0 and 6',
       };
     }
+  }
+
+  if (options.threadLevel !== undefined) {
+    if (options.threadLevel !== 0 && options.threadLevel !== 1) {
+      return {
+        code: 'INVALID_INPUT',
+        message: 'threadLevel must be 0 or 1',
+      };
+    }
+  }
+
+  if (
+    options.onProgress !== undefined &&
+    typeof options.onProgress !== 'function'
+  ) {
+    return {
+      code: 'INVALID_INPUT',
+      message: 'onProgress must be a function',
+    };
   }
 
   return null;

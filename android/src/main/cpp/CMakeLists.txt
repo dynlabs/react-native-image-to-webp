@@ -46,6 +46,7 @@ file(GLOB_RECURSE WEBP_SOURCES
   "${LIBWEBP_SOURCE_DIR}/src/dsp/*.c"
   "${LIBWEBP_SOURCE_DIR}/src/utils/*.c"
   "${LIBWEBP_SOURCE_DIR}/src/webp/*.c"
+  "${LIBWEBP_SOURCE_DIR}/src/mux/*.c"
   "${LIBWEBP_SOURCE_DIR}/sharpyuv/*.c"
 )
 
