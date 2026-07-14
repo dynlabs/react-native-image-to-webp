@@ -16,7 +16,7 @@
     "@dynlabs/react-native-image-to-webp": "workspace:^2.0.0",
     "react": "19.2.0",
     "react-native": "0.83.0",
-    "react-native-image-picker": "^7.1.2"
+    "react-native-image-picker": "^8.2.1"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
